@@ -12,6 +12,8 @@ import (
 	"syscall"
 	"time"
 
+	pkgredis "github.com/arbitrage-system/pkg/redis"
+
 	"github.com/arbitrage-system/ctp_tick/internal/adapters/ctp"
 	"github.com/arbitrage-system/ctp_tick/internal/adapters/redis"
 	"github.com/arbitrage-system/ctp_tick/internal/api"
@@ -26,9 +28,9 @@ func main() {
 
 	// ---- DI 装配 ----
 
-	// Redis 客户端
-	redisAdapter := redis.NewGoRedisAdapter(cfg.RedisAddr)
-	tickWriter := redis.NewTickWriter(redisAdapter)
+	// Redis 客户端（pkg/redis 统一连接）
+	redisClient := pkgredis.NewAdapter(cfg.RedisAddr)
+	tickWriter := redis.NewTickWriter(redisClient)
 
 	// CTP 行情订阅（mock 模式 macOS / cgo 模式 Linux）
 	mdAPI := ctp.NewMarketDataSubscriber(
