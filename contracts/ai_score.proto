@@ -1,0 +1,44 @@
+// contracts/ai_score.proto
+// AI 评分契约 — llm_scorer → Redis → trading_agent
+syntax = "proto3";
+
+package arbitrage.v1;
+
+// 常规 AI 评分（5 分钟周期）
+message AIScore {
+  string  symbol      = 1;   // "MA2509"
+  int64   timestamp   = 2;   // unix ms
+  int64   expires_at  = 3;   // 默认 +15min
+  double  score       = 4;   // [-1, +1] 方向 + 置信度
+  double  confidence  = 5;   // [0, 1] 评分本身可信度
+  string  horizon     = 6;   // "intraday"
+  string  regime      = 7;   // "trending_up/down/ranging/volatile"
+  repeated Driver  key_drivers = 8;
+  repeated string  model_chain = 9;
+  repeated string  sources     = 10;
+  string  raw_text    = 11;
+}
+
+message Driver {
+  string  factor    = 1;   // "甲醇港口库存"
+  double  weight    = 2;   // 0.4
+  string  direction = 3;   // "+" 看多 / "-" 看空
+}
+
+// 紧急评分（事件驱动 AI 介入触发）
+message EmergencyAIScore {
+  AIScore base = 1;
+
+  string trigger_reason = 2;   // "price_spike" / "volume_surge" / "boll_breakout"
+
+  message Volatility {
+    double price_change_pct_1m = 1;
+    double volume_multiplier   = 2;
+    double one_sided_ratio     = 3;
+  }
+  Volatility volatility = 3;
+
+  repeated string breaking_news    = 4;   // 紧急新闻标题
+  string          suggested_action = 5;   // "pause_new_orders" / "tighten_stops" / "halve_position" / "emergency_close"
+  double          action_confidence = 6;
+}

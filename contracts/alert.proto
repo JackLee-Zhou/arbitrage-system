@@ -1,0 +1,29 @@
+// contracts/alert.proto
+// 告警契约 — watchdog → 钉钉
+syntax = "proto3";
+
+package arbitrage.v1;
+
+message Alert {
+  string type       = 1;   // "service_down" / "memory_high" / "disk_full" / "position_mismatch" / "llm_dead"
+  string severity   = 2;   // "info" / "warning" / "critical"
+  string source     = 3;   // 告警来源服务名
+  string message    = 4;   // 告警内容
+  int64  timestamp  = 5;   // unix ms
+  map<string, string> metadata = 6;  // 额外信息
+}
+
+// 健康检查响应（所有服务统一格式）
+message HealthCheckResponse {
+  string service   = 1;   // 服务名
+  string status    = 2;   // "healthy" / "degraded" / "unhealthy"
+  string version   = 3;
+  int64  uptime    = 4;   // 运行秒数
+  repeated DependencyStatus deps = 5;
+}
+
+message DependencyStatus {
+  string name   = 1;   // "redis" / "influxdb" / "ctp"
+  string status = 2;   // "ok" / "error"
+  string detail = 3;
+}

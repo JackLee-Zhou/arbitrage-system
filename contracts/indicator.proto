@@ -1,0 +1,18 @@
+// contracts/indicator.proto
+// 技术指标契约 — trading_agent domain/indicator/ 产出
+syntax = "proto3";
+
+package arbitrage.v1;
+
+// 技术指标快照
+message IndicatorSnapshot {
+  string  symbol     = 1;
+  int64   timestamp  = 2;   // unix ms
+  repeated IndicatorValue values = 3;
+}
+
+message IndicatorValue {
+  string name   = 1;   // "ma5" / "ma20" / "boll_upper" / "boll_lower" / "atr14"
+  double value  = 2;
+  map<string, double> extras = 3;  // 额外参数（如布林带的中轨）
+}

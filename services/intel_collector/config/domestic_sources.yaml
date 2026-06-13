@@ -1,0 +1,24 @@
+# 国内源配置（不走代理）
+sources:
+  - id: "caixin_chemical"
+    name: "财联社化工频道"
+    url: "https://rss.example.com/caixin/chemical"
+    type: "rss"
+    fetch_interval_sec: 300
+    keywords:
+      - "甲醇"
+      - "MA"
+      - "化工"
+    enabled: false  # V1 待填入真实 RSS URL 后启用
+    require_proxy: false
+
+  # P2 扩展:
+  # - id: "eastmoney_ma"
+  #   name: "东方财富甲醇吧"
+  #   url: "..."
+  #   type: "html"
+  #
+  # - id: "xueqiu_ma"
+  #   name: "雪球甲醇话题"
+  #   url: "..."
+  #   type: "html"

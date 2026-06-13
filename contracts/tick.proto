@@ -1,0 +1,37 @@
+// contracts/tick.proto
+// 标准化行情数据契约 — ctp_tick → Redis Stream → indicator/trading_agent
+syntax = "proto3";
+
+package arbitrage.v1;
+
+// 标准化 Tick
+message Tick {
+  string symbol       = 1;   // "MA2509"
+  int64  timestamp    = 2;   // unix ms（交易所时间）
+  double last_price   = 3;   // 最新价
+  int64  volume       = 4;   // 累计成交量
+  double open_price   = 5;   // 开盘价
+  double high_price   = 6;   // 最高价
+  double low_price    = 7;   // 最低价
+  double pre_close    = 8;   // 昨收
+  double pre_settle   = 9;   // 昨结
+  double open_interest = 10; // 持仓量
+  double upper_limit  = 11;  // 涨停价
+  double lower_limit  = 12;  // 跌停价
+  double bid_price1   = 13;  // 买一价
+  int64  bid_volume1  = 14;  // 买一量
+  double ask_price1   = 15;  // 卖一价
+  int64  ask_volume1  = 16;  // 卖一量
+}
+
+// 1 分钟 K 线（indicator 聚合输出）
+message MinuteBar {
+  string symbol      = 1;
+  int64  timestamp   = 2;   // 分钟起始 unix ms
+  double open        = 3;
+  double high        = 4;
+  double low         = 5;
+  double close       = 6;
+  int64  volume      = 7;
+  double vwap        = 8;   // 成交量加权均价
+}

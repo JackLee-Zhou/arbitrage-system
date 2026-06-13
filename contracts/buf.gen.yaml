@@ -1,0 +1,20 @@
+# buf 代码生成配置
+# 文档：https://buf.build/docs/configuration/v2/buf-gen-yaml
+version: v2
+plugins:
+  # Go 代码生成
+  - remote: buf.build/protocolbuffers/go
+    out: generated/go
+    opt:
+      - paths=source_relative
+  # Go gRPC 代码生成
+  - remote: buf.build/grpc/go
+    out: generated/go
+    opt:
+      - paths=source_relative
+  # Python 代码生成
+  - remote: buf.build/protocolbuffers/python
+    out: generated/python
+  # Python gRPC 代码生成
+  - remote: buf.build/grpc/python
+    out: generated/python

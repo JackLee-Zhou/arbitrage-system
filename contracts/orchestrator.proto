@@ -1,0 +1,86 @@
+// contracts/orchestrator.proto
+// orchestrator gRPC 服务 — orchestrator ↔ trading_agent
+syntax = "proto3";
+
+package arbitrage.v1;
+
+import "alert.proto";
+import "order.proto";
+import "position.proto";
+
+// gRPC 服务定义
+service OrchestratorService {
+  // 状态查询
+  rpc GetStatus(StatusRequest) returns (StatusResponse);
+  rpc GetPositions(PositionRequest) returns (PositionList);
+
+  // 指令下发
+  rpc EmergencyClose(EmergencyCloseRequest) returns (EmergencyCloseResponse);
+  rpc PauseStrategy(PauseStrategyRequest) returns (PauseStrategyResponse);
+  rpc ResumeStrategy(ResumeStrategyRequest) returns (ResumeStrategyResponse);
+  rpc UpdateRiskParams(UpdateRiskRequest) returns (UpdateRiskResponse);
+
+  // 健康检查
+  rpc HealthCheck(HealthRequest) returns (HealthCheckResponse);
+}
+
+message StatusRequest {
+  string request_id = 1;
+}
+
+message StatusResponse {
+  string engine_status     = 1;   // "running" / "paused" / "safe_mode"
+  int64  last_tick_time    = 2;
+  int64  last_signal_time  = 3;
+  double current_ai_score  = 4;
+  double ai_score_decay    = 5;
+  int32  open_orders       = 6;
+  repeated string log_tail = 7;
+}
+
+message PositionRequest {}
+
+message EmergencyCloseRequest {
+  string reason    = 1;   // 紧急平仓原因
+  string symbol    = 2;   // "MA2509" 或空 = 全部
+  string request_by = 3;  // 操作人
+}
+
+message EmergencyCloseResponse {
+  bool   success = 1;
+  string message = 2;
+  repeated string order_ids = 3;
+}
+
+message PauseStrategyRequest {
+  string strategy_name = 1;
+  string request_by    = 2;
+}
+
+message PauseStrategyResponse {
+  bool   success = 1;
+  string message = 2;
+}
+
+message ResumeStrategyRequest {
+  string strategy_name = 1;
+  string request_by    = 2;
+}
+
+message ResumeStrategyResponse {
+  bool   success = 1;
+  string message = 2;
+}
+
+message UpdateRiskRequest {
+  string risk_param = 1;   // 参数名
+  double new_value  = 2;   // 新值
+  string request_by = 3;
+}
+
+message UpdateRiskResponse {
+  bool   success = 1;
+  string message = 2;
+}
+
+message HealthRequest {}

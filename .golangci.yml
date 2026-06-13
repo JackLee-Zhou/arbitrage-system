@@ -1,0 +1,37 @@
+# golangci-lint 配置 — arbitrage-system 项目级规则
+# 文档：https://golangci-lint.run/usage/configuration/
+run:
+  timeout: 3m
+  tests: true
+  modules-download-mode: readonly
+  go: "1.22"
+
+issues:
+  max-issues-per-linter: 0
+  max-same-issues: 0
+  exclude-files:
+    - ".*\\.pb\\.go$"           # 跳过 protobuf 生成代码
+  exclude-dirs:
+    - generated                  # 跳过 contracts/generated/
+
+linters:
+  enable:
+    - errcheck      # 检查未处理的错误
+    - gosimple      # 简化建议
+    - govet         # go vet（编译期检查）
+    - ineffassign   # 不可达赋值
+    - staticcheck   # 静态分析（最强）
+    - unused        # 未使用的变量/函数
+    - gofmt         # 格式检查
+    - goimports     # import 排序
+  disable-all: false
+
+linters-settings:
+  gofmt:
+    simplify: true
+  goimports:
+    local-prefixes: github.com/arbitrage-system
+  errcheck:
+    check-blank: true
+  staticcheck:
+    checks: ["all"]

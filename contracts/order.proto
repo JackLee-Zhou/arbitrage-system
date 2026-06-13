@@ -1,0 +1,27 @@
+// contracts/order.proto
+// 报单契约 — trading_agent → CTP Broker
+syntax = "proto3";
+
+package arbitrage.v1;
+
+// 报单请求
+message OrderRequest {
+  string symbol       = 1;   // "MA2509"
+  string direction    = 2;   // "buy" / "sell"
+  string offset       = 3;   // "open" / "close" / "close_today"
+  int32  volume       = 4;   // 手数
+  double price        = 5;   // 0 = 市价单
+  string order_type   = 6;   // "limit" / "market"
+  string decision_id  = 7;   // 关联决策 ID（追溯用）
+}
+
+// 报单回报
+message OrderResponse {
+  string order_id     = 1;   // CTP 报单编号
+  string decision_id  = 2;
+  string status       = 3;   // "submitted" / "filled" / "cancelled" / "rejected"
+  double filled_price = 4;
+  int32  filled_volume = 5;
+  string message      = 6;   // 错误信息（如有）
+  int64  timestamp    = 7;
+}

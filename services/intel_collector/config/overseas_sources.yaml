@@ -1,0 +1,22 @@
+# 海外源配置（P3 启用，走香港代理）
+sources:
+  # P3 实现:
+  # - id: "oilprice"
+  #   name: "OilPrice.com"
+  #   url: "https://oilprice.com/rss"
+  #   type: "rss"
+  #
+  # - id: "reuters_energy"
+  #   name: "Reuters Energy RSS"
+  #   url: "..."
+  #   type: "rss"
+  #
+  # - id: "methanex"
+  #   name: "Methanex 公司公告"
+  #   url: "..."
+  #   type: "html"
+  #
+  # - id: "iea"
+  #   name: "IEA 月报"
+  #   url: "..."
+  #   type: "html"

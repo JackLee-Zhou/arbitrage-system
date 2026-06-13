@@ -1,0 +1,14 @@
+# buf 工具链配置 — 跨服务 Protobuf 契约管理
+# 文档：https://buf.build/docs/configuration/v2/buf-yaml
+version: v2
+modules:
+  - path: .
+    name: buf.build/arbitrage-system/contracts
+lint:
+  use:
+    - STANDARD
+  except:
+    - PACKAGE_VERSION_SUFFIX  # 我们不用 package 版本后缀
+breaking:
+  use:
+    - FILE

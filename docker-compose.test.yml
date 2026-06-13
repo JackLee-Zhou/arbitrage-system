@@ -1,0 +1,36 @@
+# ============================================================
+# 集成测试编排
+# 用法：docker compose -f docker-compose.test.yml up --abort-on-container-exit
+# ============================================================
+version: "3.9"
+
+services:
+  redis:
+    image: redis:7.2-alpine
+    ports:
+      - "6379:6379"
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 1s
+      timeout: 3s
+      retries: 10
+
+  influxdb:
+    image: influxdb:2.7-alpine
+    environment:
+      DOCKER_INFLUXDB_INIT_MODE: setup
+      DOCKER_INFLUXDB_INIT_USERNAME: test
+      DOCKER_INFLUXDB_INIT_PASSWORD: testtest
+      DOCKER_INFLUXDB_INIT_ORG: test
+      DOCKER_INFLUXDB_INIT_BUCKET: test
+      DOCKER_INFLUXDB_INIT_ADMIN_TOKEN: test-token
+    ports:
+      - "8086:8086"
+    healthcheck:
+      test: ["CMD", "influx", "ping"]
+      interval: 1s
+      timeout: 3s
+      retries: 10
+
+  # 各服务的集成测试以独立 profile 运行
+  # docker compose -f docker-compose.test.yml --profile ctp_tick up

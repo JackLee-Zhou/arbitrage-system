@@ -1,0 +1,20 @@
+// contracts/rss_source.proto
+// RSS 源配置（动态管理用）
+syntax = "proto3";
+
+package arbitrage.v1;
+
+message RSSSource {
+  string id            = 1;   // uuid
+  string name          = 2;   // "财联社化工频道"
+  string url           = 3;   // RSS URL
+  string source_type   = 4;   // "domestic" / "overseas" / "social"
+  repeated string keywords = 5;  // 过滤关键词
+  int32  fetch_interval_sec = 6; // 抓取间隔（秒）
+  bool   enabled        = 7;
+  bool   require_proxy  = 8;   // 是否需要走香港代理
+  int64  last_fetch_at  = 9;
+  int32  failure_count  = 10;
+  int64  created_at     = 11;
+  string created_by     = 12;
+}

@@ -1,0 +1,21 @@
+// contracts/position.proto
+// 持仓契约
+syntax = "proto3";
+
+package arbitrage.v1;
+
+message Position {
+  string symbol        = 1;
+  string direction     = 2;   // "long" / "short"
+  int32  volume        = 3;   // 持仓手数
+  double avg_price     = 4;   // 开仓均价
+  double last_price    = 5;   // 最新价
+  double float_pnl     = 6;   // 浮动盈亏
+  int32  today_volume  = 7;   // 今仓
+  int32  yd_volume     = 8;   // 昨仓
+}
+
+message PositionList {
+  repeated Position positions = 1;
+  int64  timestamp = 2;
+}

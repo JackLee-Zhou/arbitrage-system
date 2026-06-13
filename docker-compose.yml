@@ -1,0 +1,221 @@
+# ============================================================
+# arbitrage-system — Docker Compose 编排（v2.3，9 个微服务）
+# ============================================================
+# 启动方式：
+#   docker compose --profile full up        # 完整启动
+#   docker compose --profile futures up     # 期货侧核心
+#   docker compose --profile ai-only up     # AI 评分侧
+#   docker compose --profile ui up          # 前端侧
+# ============================================================
+
+version: "3.9"
+
+services:
+  # ==========================================
+  # 基础设施
+  # ==========================================
+  redis:
+    image: redis:7.2-alpine
+    profiles: ["full", "ai-only", "futures", "ui"]
+    container_name: arbitrage-redis
+    command: >
+      redis-server
+      --appendonly yes
+      --appendfsync everysec
+      --save 900 1
+      --save 300 10
+      --save 60 10000
+      --maxmemory 1gb
+      --maxmemory-policy allkeys-lru
+    ports:
+      - "6379:6379"
+    volumes:
+      - ./data/redis:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+    restart: unless-stopped
+    networks:
+      - arbitrage-net
+
+  influxdb:
+    image: influxdb:2.7-alpine
+    profiles: ["full", "futures", "ui"]
+    container_name: arbitrage-influxdb
+    environment:
+      INFLUXD_STORAGE_CACHE_MAX_MEMORY_SIZE: 512mb
+      DOCKER_INFLUXDB_INIT_MODE: setup
+      DOCKER_INFLUXDB_INIT_USERNAME: ${INFLUXDB_ADMIN_USER:-admin}
+      DOCKER_INFLUXDB_INIT_PASSWORD: ${INFLUXDB_ADMIN_PASSWORD:-changeme}
+      DOCKER_INFLUXDB_INIT_ORG: ${INFLUXDB_ORG:-arbitrage}
+      DOCKER_INFLUXDB_INIT_BUCKET: ${INFLUXDB_BUCKET:-ma_tick}
+      DOCKER_INFLUXDB_INIT_ADMIN_TOKEN: ${INFLUXDB_TOKEN:-changeme}
+    ports:
+      - "8086:8086"
+    volumes:
+      - ./data/influxdb:/var/lib/influxdb2
+    healthcheck:
+      test: ["CMD", "influx", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    restart: unless-stopped
+    networks:
+      - arbitrage-net
+    mem_limit: 2.5g
+
+  # ==========================================
+  # 数据采集层
+  # ==========================================
+  ctp_tick:
+    build: ./services/ctp_tick
+    profiles: ["full", "futures"]
+    container_name: arbitrage-ctp_tick
+    env_file:
+      - ./services/ctp_tick/.env
+    depends_on:
+      redis:
+        condition: service_healthy
+      influxdb:
+        condition: service_healthy
+    restart: unless-stopped
+    networks:
+      - arbitrage-net
+    mem_limit: 256m
+
+  intel_collector:
+    build: ./services/intel_collector
+    profiles: ["full", "ai-only"]
+    container_name: arbitrage-intel_collector
+    env_file:
+      - ./services/intel_collector/.env
+    depends_on:
+      redis:
+        condition: service_healthy
+    restart: unless-stopped
+    networks:
+      - arbitrage-net
+    mem_limit: 512m
+
+  # ==========================================
+  # 数据加工层
+  # ==========================================
+  llm_scorer:
+    build: ./services/llm_scorer
+    profiles: ["full", "ai-only"]
+    container_name: arbitrage-llm_scorer
+    ports:
+      - "5000:5000"
+    env_file:
+      - ./services/llm_scorer/.env
+    depends_on:
+      redis:
+        condition: service_healthy
+    restart: unless-stopped
+    networks:
+      - arbitrage-net
+    mem_limit: 1g
+    mem_reservation: 768m
+
+  # ==========================================
+  # 决策核心层
+  # ==========================================
+  trading_agent:
+    build: ./services/trading_agent
+    profiles: ["full", "futures"]
+    container_name: arbitrage-trading_agent
+    ports:
+      - "8081:8081"  # /healthz + /metrics
+      - "9090:9090"  # gRPC (内网)
+    env_file:
+      - ./services/trading_agent/.env
+    depends_on:
+      redis:
+        condition: service_healthy
+      influxdb:
+        condition: service_healthy
+    restart: always
+    networks:
+      - arbitrage-net
+    mem_limit: 512m
+
+  # ==========================================
+  # 编排层
+  # ==========================================
+  orchestrator:
+    build: ./services/orchestrator
+    profiles: ["full", "ui", "futures"]
+    container_name: arbitrage-orchestrator
+    ports:
+      - "8080:8080"  # REST API + WebSocket
+    env_file:
+      - ./services/orchestrator/.env
+    depends_on:
+      redis:
+        condition: service_healthy
+      trading_agent:
+        condition: service_started
+    restart: unless-stopped
+    networks:
+      - arbitrage-net
+    mem_limit: 512m
+
+  # ==========================================
+  # 表现层
+  # ==========================================
+  dashboard_web:
+    build: ./services/dashboard_web
+    profiles: ["full", "ui"]
+    container_name: arbitrage-dashboard_web
+    ports:
+      - "8000:80"
+    depends_on:
+      orchestrator:
+        condition: service_started
+    restart: unless-stopped
+    networks:
+      - arbitrage-net
+    mem_limit: 128m
+
+  # ==========================================
+  # 持久化层
+  # ==========================================
+  db_writer:
+    build: ./services/db_writer
+    profiles: ["full", "futures", "ai-only"]
+    container_name: arbitrage-db_writer
+    env_file:
+      - ./services/db_writer/.env
+    depends_on:
+      redis:
+        condition: service_healthy
+      influxdb:
+        condition: service_healthy
+    restart: unless-stopped
+    networks:
+      - arbitrage-net
+    mem_limit: 512m
+
+  # ==========================================
+  # 监控层
+  # ==========================================
+  watchdog:
+    build: ./services/watchdog
+    profiles: ["full"]
+    container_name: arbitrage-watchdog
+    env_file:
+      - ./services/watchdog/.env
+    depends_on:
+      redis:
+        condition: service_healthy
+    restart: unless-stopped
+    networks:
+      - arbitrage-net
+    mem_limit: 128m
+
+networks:
+  arbitrage-net:
+    driver: bridge
+    name: arbitrage-net

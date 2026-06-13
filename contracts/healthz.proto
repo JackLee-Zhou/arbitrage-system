@@ -1,0 +1,8 @@
+// contracts/healthz.proto
+// 统一健康检查响应
+syntax = "proto3";
+
+package arbitrage.v1;
+
+// 已在 alert.proto 中定义 HealthCheckResponse
+// 本文件为预留扩展空间

@@ -1,0 +1,11 @@
+# 社交源配置（V4 启用，走香港代理 + Telegram 国际节点）
+sources:
+  # V4 实现:
+  # - id: "tg_chemical"
+  #   name: "化工/能源 Telegram 群组"
+  #   type: "telegram"
+  #
+  # 明确不做：
+  # ❌ Discord（中文化工圈使用率 < 5%）
+  # ❌ X/Twitter（API $200/月起步）
+  # ❌ 微博热搜（企业 API 资质难拿）

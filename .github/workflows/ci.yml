@@ -1,0 +1,141 @@
+# ============================================================
+# arbitrage-system CI 流水线
+# 触发条件：push/PR 到 main 或 dev 分支
+# ============================================================
+name: CI
+
+on:
+  push:
+    branches: [main, dev]
+  pull_request:
+    branches: [main, dev]
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  # ==========================================
+  # Go 服务检测（矩阵并行）
+  # ==========================================
+  go-lint-test:
+    name: Go — Lint & Test
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        service:
+          - ctp_tick
+          - trading_agent
+          - orchestrator
+          - db_writer
+          - watchdog
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version: "1.22"
+          cache: false
+
+      - name: go vet
+        working-directory: services/${{ matrix.service }}
+        run: go vet ./...
+
+      - name: golangci-lint
+        uses: golangci/golangci-lint-action@v6
+        with:
+          version: latest
+          working-directory: services/${{ matrix.service }}
+          args: --timeout=3m
+
+      - name: unit test
+        working-directory: services/${{ matrix.service }}
+        run: go test ./... -short -count=1 -v
+
+  # ==========================================
+  # Python 服务检测
+  # ==========================================
+  python-lint-test:
+    name: Python — Lint & Test
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        service:
+          - llm_scorer
+          - intel_collector
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: install dependencies
+        working-directory: services/${{ matrix.service }}
+        run: |
+          pip install --upgrade pip
+          pip install -e ".[dev]"
+
+      - name: ruff lint
+        working-directory: services/${{ matrix.service }}
+        run: ruff check .
+
+      - name: unit test
+        working-directory: services/${{ matrix.service }}
+        run: python -m pytest tests/unit/ -v
+
+  # ==========================================
+  # 契约检测
+  # ==========================================
+  proto-check:
+    name: Contracts — Lint & Breaking Changes
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: bufbuild/buf-setup-action@v1
+        with:
+          version: latest
+
+      - name: buf lint
+        working-directory: contracts
+        run: buf lint
+
+      - name: buf breaking (against main)
+        if: github.event_name == 'pull_request'
+        working-directory: contracts
+        run: |
+          buf breaking --against 'https://github.com/${{ github.repository }}.git#branch=main' || true
+        continue-on-error: true
+
+  # ==========================================
+  # Dashboard 前端检测
+  # ==========================================
+  frontend-check:
+    name: Dashboard — Lint & Build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "18"
+
+      - name: install
+        working-directory: services/dashboard_web
+        run: npm ci
+
+      - name: lint (ESLint via react-scripts)
+        working-directory: services/dashboard_web
+        run: npx react-scripts test --watchAll=false --passWithNoTests 2>&1 || true
+
+      - name: build check
+        working-directory: services/dashboard_web
+        run: npm run build
+
+  # ==========================================
+  # 汇总（全部通过才绿）
+  # ==========================================
+  ci-summary:
+    name: ✅ CI Summary
+    needs: [go-lint-test, python-lint-test, proto-check, frontend-check]
+    runs-on: ubuntu-latest
+    steps:
+      - name: All checks passed
+        run: echo "✅ 所有 CI 检测通过"

@@ -1,0 +1,19 @@
+// contracts/intel_event.proto
+// 统一情报事件格式 — intel_collector → Redis Stream → llm_scorer
+syntax = "proto3";
+
+package arbitrage.v1;
+
+message IntelEvent {
+  string raw_id       = 1;   // sha256(url + fetched_at)
+  string source       = 2;   // "caixin" / "eastmoney" / "xueqiu" / "oilprice" / "reuters"
+  string source_type  = 3;   // "domestic" / "overseas" / "social"
+  string title        = 4;
+  string body         = 5;   // 清洗后正文
+  string url          = 6;
+  string author       = 7;
+  int64  published_at = 8;   // unix ms
+  int64  fetched_at   = 9;   // unix ms
+  int64  simhash      = 10;  // SimHash 去重值
+  repeated string keywords = 11;  // 匹配关键词
+}
