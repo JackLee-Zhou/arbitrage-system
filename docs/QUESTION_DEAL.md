@@ -10,7 +10,7 @@
 
 | 服务 | QUESTION.md | 待解决 | 已修复 | 状态 |
 |---|---|---|---|---|
-| ctp_tick | [QUESTION.md](../services/ctp_tick/QUESTION.md) | 2 | 7 | 开发中 |
+| ctp_tick | [QUESTION.md](../services/ctp_tick/QUESTION.md) | 2 | 22 | 开发中 |
 | trading_agent | [QUESTION.md](../services/trading_agent/QUESTION.md) | 0 | 0 | 待开发 |
 | orchestrator | [QUESTION.md](../services/orchestrator/QUESTION.md) | 0 | 0 | 待开发 |
 | db_writer | [QUESTION.md](../services/db_writer/QUESTION.md) | 0 | 0 | 待开发 |
