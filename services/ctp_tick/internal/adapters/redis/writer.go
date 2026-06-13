@@ -1,4 +1,4 @@
-// ctp_tick/adapters/redis — 行情写入（基于 pkg/redis 共享连接）
+// ctp_tick/adapters/redis — 行情写入管道（基于 pkg/redis 共享连接）
 package redis
 
 import (
@@ -6,10 +6,12 @@ import (
 	"encoding/json"
 	"fmt"
 	"log"
+	"sync"
 	"time"
 
 	pkgredis "github.com/arbitrage-system/pkg/redis"
 
+	"github.com/arbitrage-system/ctp_tick/internal/adapters/ctp"
 	"github.com/arbitrage-system/ctp_tick/internal/domain"
 )
 
@@ -23,28 +25,73 @@ const (
 )
 
 // ============================================================
-// TickWriter — 行情写入器
-// 依赖 pkg/redis 提供的统一 RedisClient 接口
+// TickWriter — 异步行情写入器
 // ============================================================
 
-// TickWriter 将标准化 Tick 写入 Redis Streams（业务逻辑层）
-// Redis 连接由 pkg/redis.NewAdapter 统一创建并注入
+// TickWriter 异步行情写入管道
+// 从 CTP 回调线程接收 Tick（非阻塞 send），在独立 goroutine 中消费
+//
+//	CTP 回调 → tickChannel (非阻塞) → writerLoop (单 goroutine)
+//	                                     ├→ batchFlush: write:tick (100条/1s)
+//	                                     └→ focusSend:  tick:<symbol> (逐笔)
 type TickWriter struct {
-	client pkgredis.RedisClient
+	client       pkgredis.RedisClient
+	focusSymbols map[string]bool // 关注合约集合（SUBSCRIBE_SYMBOLS）
+
+	tickCh  chan *writeTask // 内部缓冲通道（非阻塞 send）
+	dropped int64           // 通道满丢弃计数
+
+	batchMu   sync.Mutex
+	batchBuf  []map[string]interface{} // 攒批缓冲区
+	batchLast time.Time
+
+	stopCh chan struct{}
+	wg     sync.WaitGroup
 }
 
-// NewTickWriter 创建行情写入器
-func NewTickWriter(client pkgredis.RedisClient) *TickWriter {
-	return &TickWriter{client: client}
+// writeTask 写入任务
+type writeTask struct {
+	symbol string
+	values map[string]interface{}
 }
 
-// WriteTick 双写：tick:<symbol>（业务流 → trading_agent）+ write:tick（持久化流 → db_writer）
-func (w *TickWriter) WriteTick(ctx context.Context, tick *domain.StandardTick) error {
+// NewTickWriter 创建异步行情写入器
+// tickChannel: 来自 CTP 回调的入口（外部创建，注入）
+func NewTickWriter(client pkgredis.RedisClient, focusSymbols []string) *TickWriter {
+	fs := make(map[string]bool, len(focusSymbols))
+	for _, s := range focusSymbols {
+		fs[s] = true
+	}
+
+	w := &TickWriter{
+		client:       client,
+		focusSymbols: fs,
+		tickCh:       make(chan *writeTask, ctp.TickChannelBufferSize),
+		batchBuf:     make([]map[string]interface{}, 0, ctp.BatchWriteSize),
+		batchLast:    time.Now(),
+		stopCh:       make(chan struct{}),
+	}
+
+	if len(fs) > 0 {
+		log.Printf("[redis.writer] focus symbols: %v", focusSymbols)
+	}
+	log.Printf("[redis.writer] batch: %d items / %v", ctp.BatchWriteSize, ctp.BatchWriteInterval)
+
+	w.wg.Add(1)
+	go w.writerLoop()
+
+	return w
+}
+
+// Send 非阻塞发送 Tick 到写入管道
+// 由 CTP 回调线程调用，绝对不能阻塞
+// 返回 true 表示成功入队，false 表示通道满已丢弃
+func (w *TickWriter) Send(symbol string, tick *domain.StandardTick) bool {
 	protoTick := tick.ToProto()
 
 	payload, err := json.Marshal(protoTick)
 	if err != nil {
-		return fmt.Errorf("tick marshal: %w", err)
+		return false
 	}
 
 	values := map[string]interface{}{
@@ -55,20 +102,121 @@ func (w *TickWriter) WriteTick(ctx context.Context, tick *domain.StandardTick) e
 		"data":      string(payload),
 	}
 
-	businessStream := fmt.Sprintf("tick:%s", tick.Symbol)
-	persistStream := "write:tick"
+	task := &writeTask{symbol: symbol, values: values}
 
-	// 业务流（失败则报错）
-	if err := w.xaddWithRetry(ctx, businessStream, values); err != nil {
-		return fmt.Errorf("xadd %s: %w", businessStream, err)
+	select {
+	case w.tickCh <- task:
+		return true
+	default:
+		// 通道满，丢弃（不阻塞 CTP 回调）
+		w.dropped++
+		if w.dropped%1000 == 0 {
+			log.Printf("[redis.writer] WARNING: tickChannel full, dropped %d ticks", w.dropped)
+		}
+		return false
 	}
+}
 
-	// 持久化流（失败不阻塞业务）
-	if err := w.xaddWithRetry(ctx, persistStream, values); err != nil {
-		log.Printf("[redis.writer] xadd %s failed (non-fatal): %v", persistStream, err)
+// Close 优雅关闭写入器
+func (w *TickWriter) Close() {
+	close(w.stopCh)
+	w.wg.Wait()
+
+	// 最后 flush 一次残余数据
+	w.batchMu.Lock()
+	if len(w.batchBuf) > 0 {
+		w.flushBatch()
 	}
+	w.batchMu.Unlock()
 
-	return nil
+	if w.dropped > 0 {
+		log.Printf("[redis.writer] total dropped: %d ticks", w.dropped)
+	}
+}
+
+// Dropped 返回丢弃计数
+func (w *TickWriter) Dropped() int64 {
+	return w.dropped
+}
+
+// ============================================================
+// 内部：writer goroutine
+// ============================================================
+
+// writerLoop 单 goroutine 消费 tickChannel
+// 批量写入 write:tick（100条/1s），近实时写入 tick:<symbol>
+func (w *TickWriter) writerLoop() {
+	defer w.wg.Done()
+	log.Printf("[redis.writer] writerLoop started")
+
+	batchTicker := time.NewTicker(ctp.BatchWriteInterval)
+	defer batchTicker.Stop()
+
+	for {
+		select {
+		case <-w.stopCh:
+			return
+
+		case task := <-w.tickCh:
+			// 全部合约 → 攒批 write:tick
+			w.addToBatch(task.values)
+
+			// 关注合约 → 逐笔近实时 XADD tick:<symbol>
+			if w.focusSymbols[task.symbol] {
+				w.sendFocus(task.symbol, task.values)
+			}
+
+		case <-batchTicker.C:
+			// 定时 flush（1秒）
+			w.batchMu.Lock()
+			if len(w.batchBuf) > 0 {
+				w.flushBatch()
+			}
+			w.batchMu.Unlock()
+		}
+	}
+}
+
+// addToBatch 将数据加入批处理缓冲区
+func (w *TickWriter) addToBatch(values map[string]interface{}) {
+	w.batchMu.Lock()
+	defer w.batchMu.Unlock()
+
+	w.batchBuf = append(w.batchBuf, values)
+
+	// 达到阈值 → flush
+	if len(w.batchBuf) >= ctp.BatchWriteSize {
+		w.flushBatch()
+	}
+}
+
+// flushBatch 批量写入 write:tick（调用方已持有 batchMu）
+func (w *TickWriter) flushBatch() {
+	if len(w.batchBuf) == 0 {
+		return
+	}
+	batch := make([]map[string]interface{}, len(w.batchBuf))
+	copy(batch, w.batchBuf)
+	w.batchBuf = w.batchBuf[:0]
+
+	// 异步批量写入，不阻塞 writerLoop
+	go func(items []map[string]interface{}) {
+		ctx := context.Background()
+		for _, values := range items {
+			if err := w.xaddWithRetry(ctx, "write:tick", values); err != nil {
+				log.Printf("[redis.writer] batch XADD write:tick failed: %v", err)
+			}
+		}
+	}(batch)
+}
+
+// sendFocus 近实时写入 tick:<symbol>（关注合约独有）
+func (w *TickWriter) sendFocus(symbol string, values map[string]interface{}) {
+	ctx := context.Background()
+	stream := fmt.Sprintf("tick:%s", symbol)
+	if err := w.client.XAdd(ctx, stream, values); err != nil {
+		log.Printf("[redis.writer] XADD %s failed: %v", stream, err)
+	}
 }
 
 // xaddWithRetry 指数退避重试
@@ -79,7 +227,6 @@ func (w *TickWriter) xaddWithRetry(ctx context.Context, stream string, values ma
 			backoff := retryBackoffBase * time.Duration(1<<(attempt-1))
 			time.Sleep(backoff)
 		}
-
 		writeCtx, cancel := context.WithTimeout(ctx, writeTimeout)
 		err := w.client.XAdd(writeCtx, stream, values)
 		cancel()
@@ -87,17 +234,6 @@ func (w *TickWriter) xaddWithRetry(ctx context.Context, stream string, values ma
 			return nil
 		}
 		lastErr = err
-		log.Printf("[redis.writer] XADD %s attempt %d/%d: %v", stream, attempt+1, maxRetries, err)
 	}
 	return lastErr
-}
-
-// Ping 检查 Redis 连通性
-func (w *TickWriter) Ping(ctx context.Context) error {
-	return w.client.Ping(ctx)
-}
-
-// Close 关闭连接
-func (w *TickWriter) Close() error {
-	return w.client.Close()
 }

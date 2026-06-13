@@ -146,6 +146,40 @@ func (s ConnectionState) String() string {
 }
 
 // ============================================================
+// TD API 全市场合约查询常量
+// ============================================================
+
+// 中国六大期货交易所代码（Python ctp_engine 同款列表）
+var AllExchanges = []string{"SHFE", "DCE", "CZCE", "CFFEX", "INE", "GFEX"}
+
+const (
+	ProductClassFutures = '1' // 期货品种（排除期权/组合/期指令）
+	TDQueryTimeoutSec   = 30  // 全市场查询超时（秒）
+)
+
+// ============================================================
+// ContractQuerier 合约查询抽象接口
+// ============================================================
+
+// ContractQuerier 全市场合约查询接口
+// 启动时通过 TD API 查询一次，获取所有期货合约列表后释放资源
+type ContractQuerier interface {
+	// QueryAllFutures 查询 6 个交易所的全市场期货合约
+	// 对应 Python ctp_engine 的 load_all_futures()
+	QueryAllFutures(frontAddr, brokerID, userID, password string) ([]string, error)
+}
+
+// ============================================================
+// 异步写入常量
+// ============================================================
+
+const (
+	TickChannelBufferSize = 10000           // CTP 回调 → writer goroutine 缓冲区
+	BatchWriteSize        = 100             // 批量写入阈值（条）
+	BatchWriteInterval    = 1 * time.Second // 批量写入间隔
+)
+
+// ============================================================
 // 定时器常量
 // ============================================================
 

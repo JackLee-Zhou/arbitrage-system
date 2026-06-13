@@ -1,5 +1,5 @@
 // ctp_tick — CTP 行情订阅服务入口
-// 装配 domain + adapters + api，启动行情订阅主循环
+// 启动时查询全市场期货合约 → 订阅所有 → 异步批量落库 + 关注合约近实时推送
 package main
 
 import (
@@ -28,23 +28,22 @@ func main() {
 
 	// ---- DI 装配 ----
 
-	// Redis 客户端（pkg/redis 统一连接）
+	// Redis（pkg/redis 统一连接）
 	redisClient := pkgredis.NewAdapter(cfg.RedisAddr)
-	tickWriter := redis.NewTickWriter(redisClient)
 
-	// CTP 行情订阅（mock 模式 macOS / cgo 模式 Linux）
+	// 异步行情写入器（内部启动 writerLoop goroutine）
+	tickWriter := redis.NewTickWriter(redisClient, cfg.SubscribeSymbols)
+
+	// 合约查询器（TD API — Mock 或 cgo 真实现）
+	contractQuerier := ctp.NewContractQuerier()
+
+	// 行情订阅器（MD API — Mock 或 cgo 真实现）
 	mdAPI := ctp.NewMarketDataSubscriber(
-		cfg.FlowPath,
-		cfg.CTPFrontAddr,
-		cfg.CTPBrokerID,
-		cfg.CTPUserID,
-		cfg.CTPPassword,
+		cfg.FlowPath, cfg.CTPFrontAddr, cfg.CTPBrokerID, cfg.CTPUserID, cfg.CTPPassword,
 	)
 
-	// 指标收集器
+	// 指标收集
 	metrics := &api.Metrics{}
-
-	// 最后 Tick 时间（健康检查用）
 	var lastTickTime atomic.Pointer[time.Time]
 	now := time.Time{}
 	lastTickTime.Store(&now)
@@ -52,11 +51,11 @@ func main() {
 	// 健康检查
 	healthChecker := &api.HealthChecker{
 		ServiceName:  cfg.ServiceName,
-		Version:      "0.1.0",
+		Version:      "0.2.0",
 		StartTime:    time.Now(),
 		CTPConnected: mdAPI.IsConnected,
 		RedisConnected: func() bool {
-			return tickWriter.Ping(context.Background()) == nil
+			return redisClient.Ping(context.Background()) == nil
 		},
 		LastTickTime: func() time.Time {
 			t := lastTickTime.Load()
@@ -67,20 +66,12 @@ func main() {
 		},
 	}
 
-	// ---- 注册行情回调 ----
-	mdAPI.OnTick(func(raw *ctp.DepthMarketData) {
-		go processTick(raw, tickWriter, metrics, &lastTickTime)
-	})
-
-	// ---- 启动 HTTP 服务 ----
+	// ---- HTTP 服务 ----
 	mux := http.NewServeMux()
 	mux.Handle("/healthz", healthChecker)
 	mux.Handle("/metrics", metrics)
 
-	httpServer := &http.Server{
-		Addr:    ":" + cfg.HealthPort,
-		Handler: mux,
-	}
+	httpServer := &http.Server{Addr: ":" + cfg.HealthPort, Handler: mux}
 	go func() {
 		log.Printf("[ctp_tick] health server on :%s", cfg.HealthPort)
 		if err := httpServer.ListenAndServe(); err != http.ErrServerClosed {
@@ -88,14 +79,45 @@ func main() {
 		}
 	}()
 
-	// ---- 连接 CTP + 订阅 ----
+	// ---- Step 1: 查询全市场期货合约 ----
+	allSymbols, err := contractQuerier.QueryAllFutures(
+		cfg.CTPFrontAddr, cfg.CTPBrokerID, cfg.CTPUserID, cfg.CTPPassword,
+	)
+	if err != nil {
+		log.Printf("[ctp_tick] TD query failed: %v — falling back to focus symbols only", err)
+		allSymbols = cfg.SubscribeSymbols
+	}
+	log.Printf("[ctp_tick] total %d futures to subscribe, focus=%v", len(allSymbols), cfg.SubscribeSymbols)
+
+	// ---- Step 2: 注册行情回调（绝对不能阻塞 CTP 回调线程）----
+	mdAPI.OnTick(func(raw *ctp.DepthMarketData) {
+		metrics.TickReceived.Add(1)
+
+		// 转 domain 层标准化 + 安全过滤
+		tick, err := domain.FromRawMarketData(convertToRaw(raw))
+		if err != nil {
+			metrics.TickDropped.Add(1)
+			return
+		}
+
+		// 非阻塞发送到 writer goroutine —— 绝对不能阻塞
+		if tickWriter.Send(tick.Symbol, tick) {
+			metrics.RedisWrites.Add(1)
+		} else {
+			metrics.RedisFailures.Add(1)
+		}
+
+		// 更新最后 Tick 时间
+		now := time.Now()
+		lastTickTime.Store(&now)
+	})
+
+	// ---- Step 3: 连接 CTP + 订阅全市场合约 ----
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
-	symbols := cfg.SubscribeSymbols
-	log.Printf("[ctp_tick] connecting to %s, symbols=%v", cfg.CTPFrontAddr, symbols)
-
-	if err := mdAPI.Connect(symbols); err != nil {
+	log.Printf("[ctp_tick] connecting to %s, subscribing %d symbols...", cfg.CTPFrontAddr, len(allSymbols))
+	if err := mdAPI.Connect(allSymbols); err != nil {
 		log.Printf("[ctp_tick] CTP connect failed: %v (mock mode continues)", err)
 	}
 
@@ -114,44 +136,12 @@ func main() {
 	defer shutdownCancel()
 
 	mdAPI.Close()
+	tickWriter.Close() // 等待 writerLoop 结束 + flush 残余数据
 	_ = httpServer.Shutdown(shutdownCtx)
-	_ = tickWriter.Close()
+	_ = redisClient.Close()
 
-	log.Println("[ctp_tick] shutdown complete")
-}
-
-// ============================================================
-// Tick 处理管道
-// ============================================================
-
-// processTick 行情处理管道：CTP 原始数据 → 标准化 → Redis Stream
-func processTick(
-	raw *ctp.DepthMarketData,
-	writer *redis.TickWriter,
-	metrics *api.Metrics,
-	lastTickTime *atomic.Pointer[time.Time],
-) {
-	metrics.TickReceived.Add(1)
-
-	// Step 1: 转换为 domain 层标准结构 + 安全过滤
-	tick, err := domain.FromRawMarketData(convertToRaw(raw))
-	if err != nil {
-		metrics.TickDropped.Add(1)
-		return
-	}
-
-	// Step 2: 写入 Redis Stream
-	ctx := context.Background()
-	if err := writer.WriteTick(ctx, tick); err != nil {
-		metrics.RedisFailures.Add(1)
-		log.Printf("[ctp_tick] write tick failed: %v", err)
-		return
-	}
-	metrics.RedisWrites.Add(1)
-
-	// Step 3: 更新最后 Tick 时间
-	now := time.Now()
-	lastTickTime.Store(&now)
+	log.Printf("[ctp_tick] shutdown complete (received=%d dropped=%d)",
+		metrics.TickReceived.Load(), metrics.TickDropped.Load())
 }
 
 // convertToRaw 将 adapters/ctp.DepthMarketData 转为 domain.RawMarketData
@@ -191,7 +181,7 @@ type Config struct {
 	CTPUserID        string
 	CTPPassword      string
 	FlowPath         string
-	SubscribeSymbols []string
+	SubscribeSymbols []string // 关注合约（走 tick:<symbol> + write:tick）；其他仅 write:tick
 }
 
 func loadConfig() Config {
@@ -219,7 +209,6 @@ func parseSymbols(raw string) []string {
 	if raw == "" {
 		return nil
 	}
-	// 逗号分隔的合约列表
 	var result []string
 	for _, s := range splitTrim(raw, ",") {
 		if s != "" {
