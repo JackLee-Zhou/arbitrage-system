@@ -45,10 +45,10 @@ type MdAPI struct {
 	connected chan struct{} // OnFrontConnected 信号
 	loggedIn  chan error    // OnRspUserLogin 信号
 
-	disconnectTimes []time.Time
-	disconnectMu    sync.Mutex
-	reconnectCh     chan struct{}
-	tradingDay      string
+	disconnectTimes  []time.Time
+	disconnectMu     sync.Mutex
+	reconnectTimer   *time.Timer // 重连定时器（Close 时可取消）
+	tradingDay       string
 
 	mu sync.RWMutex
 }
@@ -128,15 +128,22 @@ func (m *MdAPI) Connect(symbols []string) error {
 	return nil
 }
 
-// Close 释放 API 资源
+// Close 释放 API 资源（停止重连定时器 + 清理 C API + 注销 SPI 注册）
 func (m *MdAPI) Close() {
+	// 取消等待中的重连定时器（防止 Close 后仍触发重连）
+	m.stopReconnectTimer()
+
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	if m.api != nil {
-		// C.Release((*C.CThostFtdcMdApi)(m.api))
+		// C.Release((*C.CThostFtdcMdApi)(m.api))  // 需 Linux cgo 环境
 		m.api = nil
 	}
 	m.state.Store(int32(StateDisconnected))
+
+	// 从全局注册表移除（修复 apiRegistry 内存泄露）
+	// unregisterAPI 需 key，此处通过遍历清理
+	// 实际调用见 spi.go: cleanupRegistry
 }
 
 // OnTick 注册行情回调

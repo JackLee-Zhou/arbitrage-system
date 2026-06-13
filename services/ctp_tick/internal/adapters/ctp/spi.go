@@ -64,6 +64,23 @@ func lookupAPI(key unsafe.Pointer) *MdAPI {
 	return apiRegistry[key]
 }
 
+func unregisterAPI(key unsafe.Pointer) {
+	apiRegistryMu.Lock()
+	defer apiRegistryMu.Unlock()
+	delete(apiRegistry, key)
+}
+
+// cleanupRegistryByAPI 通过 MdAPI 指针遍历清理注册表（Close 时调用）
+func cleanupRegistryByAPI(md *MdAPI) {
+	apiRegistryMu.Lock()
+	defer apiRegistryMu.Unlock()
+	for k, v := range apiRegistry {
+		if v == md {
+			delete(apiRegistry, k)
+		}
+	}
+}
+
 // ============================================================
 //export — Go 侧回调函数（C 侧通过 cgo 调用）
 // 每个对应 Python ctp_engine MdSpi 的一个方法

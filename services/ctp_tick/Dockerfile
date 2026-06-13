@@ -16,5 +16,6 @@ FROM alpine:3.20
 RUN apk add --no-cache ca-certificates tzdata
 ENV TZ=Asia/Shanghai
 COPY --from=builder /ctp_tick /usr/local/bin/ctp_tick
+USER 1000:1000
 EXPOSE 8081
 CMD ["ctp_tick"]

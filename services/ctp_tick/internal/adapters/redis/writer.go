@@ -30,33 +30,27 @@ const (
 
 // TickWriter 异步行情写入管道
 // 从 CTP 回调线程接收 Tick（非阻塞 send），在独立 goroutine 中消费
-//
-//	CTP 回调 → tickChannel (非阻塞) → writerLoop (单 goroutine)
-//	                                     ├→ batchFlush: write:tick (100条/1s)
-//	                                     └→ focusSend:  tick:<symbol> (逐笔)
 type TickWriter struct {
 	client       pkgredis.RedisClient
-	focusSymbols map[string]bool // 关注合约集合（SUBSCRIBE_SYMBOLS）
+	focusSymbols map[string]bool
 
-	tickCh  chan *writeTask // 内部缓冲通道（非阻塞 send）
-	dropped int64           // 通道满丢弃计数
+	tickCh  chan *writeTask
+	dropped int64
 
 	batchMu   sync.Mutex
-	batchBuf  []map[string]interface{} // 攒批缓冲区
+	batchBuf  []map[string]interface{}
 	batchLast time.Time
 
-	stopCh chan struct{}
-	wg     sync.WaitGroup
+	flushWg sync.WaitGroup // 追踪 flushBatch goroutine
+	stopCh  chan struct{}
+	wg      sync.WaitGroup
 }
 
-// writeTask 写入任务
 type writeTask struct {
 	symbol string
 	values map[string]interface{}
 }
 
-// NewTickWriter 创建异步行情写入器
-// tickChannel: 来自 CTP 回调的入口（外部创建，注入）
 func NewTickWriter(client pkgredis.RedisClient, focusSymbols []string) *TickWriter {
 	fs := make(map[string]bool, len(focusSymbols))
 	for _, s := range focusSymbols {
@@ -83,17 +77,13 @@ func NewTickWriter(client pkgredis.RedisClient, focusSymbols []string) *TickWrit
 	return w
 }
 
-// Send 非阻塞发送 Tick 到写入管道
-// 由 CTP 回调线程调用，绝对不能阻塞
-// 返回 true 表示成功入队，false 表示通道满已丢弃
+// Send 非阻塞发送 Tick 到写入管道。返回 true=入队成功，false=丢弃。
 func (w *TickWriter) Send(symbol string, tick *domain.StandardTick) bool {
 	protoTick := tick.ToProto()
-
 	payload, err := json.Marshal(protoTick)
 	if err != nil {
 		return false
 	}
-
 	values := map[string]interface{}{
 		"symbol":    protoTick.Symbol,
 		"timestamp": protoTick.Timestamp,
@@ -101,14 +91,12 @@ func (w *TickWriter) Send(symbol string, tick *domain.StandardTick) bool {
 		"volume":    protoTick.Volume,
 		"data":      string(payload),
 	}
-
 	task := &writeTask{symbol: symbol, values: values}
 
 	select {
 	case w.tickCh <- task:
 		return true
 	default:
-		// 通道满，丢弃（不阻塞 CTP 回调）
 		w.dropped++
 		if w.dropped%1000 == 0 {
 			log.Printf("[redis.writer] WARNING: tickChannel full, dropped %d ticks", w.dropped)
@@ -117,34 +105,38 @@ func (w *TickWriter) Send(symbol string, tick *domain.StandardTick) bool {
 	}
 }
 
-// Close 优雅关闭写入器
+// Close 优雅关闭：停止 writerLoop → 排空 tickCh → 等待 flushBatch 完成
 func (w *TickWriter) Close() {
 	close(w.stopCh)
 	w.wg.Wait()
 
-	// 最后 flush 一次残余数据
+	// drain 残余 tickCh
+	for len(w.tickCh) > 0 {
+		task := <-w.tickCh
+		w.addToBatch(task.values)
+	}
+
+	// 最后 flush
 	w.batchMu.Lock()
 	if len(w.batchBuf) > 0 {
 		w.flushBatch()
 	}
 	w.batchMu.Unlock()
 
+	// 等待所有 flushBatch goroutine 完成
+	w.flushWg.Wait()
+
 	if w.dropped > 0 {
 		log.Printf("[redis.writer] total dropped: %d ticks", w.dropped)
 	}
 }
 
-// Dropped 返回丢弃计数
-func (w *TickWriter) Dropped() int64 {
-	return w.dropped
-}
+func (w *TickWriter) Dropped() int64 { return w.dropped }
 
 // ============================================================
-// 内部：writer goroutine
+// writerLoop
 // ============================================================
 
-// writerLoop 单 goroutine 消费 tickChannel
-// 批量写入 write:tick（100条/1s），近实时写入 tick:<symbol>
 func (w *TickWriter) writerLoop() {
 	defer w.wg.Done()
 	log.Printf("[redis.writer] writerLoop started")
@@ -158,16 +150,12 @@ func (w *TickWriter) writerLoop() {
 			return
 
 		case task := <-w.tickCh:
-			// 全部合约 → 攒批 write:tick
 			w.addToBatch(task.values)
-
-			// 关注合约 → 逐笔近实时 XADD tick:<symbol>
 			if w.focusSymbols[task.symbol] {
-				w.sendFocus(task.symbol, task.values)
+				go w.sendFocus(task.symbol, task.values) // 异步，不阻塞 writerLoop
 			}
 
 		case <-batchTicker.C:
-			// 定时 flush（1秒）
 			w.batchMu.Lock()
 			if len(w.batchBuf) > 0 {
 				w.flushBatch()
@@ -177,20 +165,16 @@ func (w *TickWriter) writerLoop() {
 	}
 }
 
-// addToBatch 将数据加入批处理缓冲区
 func (w *TickWriter) addToBatch(values map[string]interface{}) {
 	w.batchMu.Lock()
 	defer w.batchMu.Unlock()
-
 	w.batchBuf = append(w.batchBuf, values)
-
-	// 达到阈值 → flush
 	if len(w.batchBuf) >= ctp.BatchWriteSize {
 		w.flushBatch()
 	}
 }
 
-// flushBatch 批量写入 write:tick（调用方已持有 batchMu）
+// flushBatch 批量写入 write:tick（已被 batchMu 保护）
 func (w *TickWriter) flushBatch() {
 	if len(w.batchBuf) == 0 {
 		return
@@ -199,8 +183,9 @@ func (w *TickWriter) flushBatch() {
 	copy(batch, w.batchBuf)
 	w.batchBuf = w.batchBuf[:0]
 
-	// 异步批量写入，不阻塞 writerLoop
+	w.flushWg.Add(1)
 	go func(items []map[string]interface{}) {
+		defer w.flushWg.Done()
 		ctx := context.Background()
 		for _, values := range items {
 			if err := w.xaddWithRetry(ctx, "write:tick", values); err != nil {
@@ -210,7 +195,6 @@ func (w *TickWriter) flushBatch() {
 	}(batch)
 }
 
-// sendFocus 近实时写入 tick:<symbol>（关注合约独有）
 func (w *TickWriter) sendFocus(symbol string, values map[string]interface{}) {
 	ctx := context.Background()
 	stream := fmt.Sprintf("tick:%s", symbol)
@@ -219,7 +203,6 @@ func (w *TickWriter) sendFocus(symbol string, values map[string]interface{}) {
 	}
 }
 
-// xaddWithRetry 指数退避重试
 func (w *TickWriter) xaddWithRetry(ctx context.Context, stream string, values map[string]interface{}) error {
 	var lastErr error
 	for attempt := 0; attempt < maxRetries; attempt++ {

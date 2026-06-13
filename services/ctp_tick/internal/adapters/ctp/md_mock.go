@@ -26,9 +26,10 @@ type MockMdAPI struct {
 	state      atomic.Int32
 	tradingDay string
 
-	stopCh chan struct{}
-	tickCh chan struct{}
-	mu     sync.RWMutex
+	stopCh    chan struct{}
+	tickCh    chan struct{}
+	closeOnce sync.Once
+	mu        sync.RWMutex
 }
 
 // NewMarketDataSubscriber 创建 Mock 行情订阅实例
@@ -80,9 +81,11 @@ func (m *MockMdAPI) Connect(symbols []string) error {
 
 // Close 停止 mock 推送
 func (m *MockMdAPI) Close() {
-	close(m.stopCh)
-	m.state.Store(int32(StateDisconnected))
-	log.Printf("[ctp.mock] api released")
+	m.closeOnce.Do(func() {
+		close(m.stopCh)
+		m.state.Store(int32(StateDisconnected))
+		log.Printf("[ctp.mock] api released")
+	})
 }
 
 // OnTick 注册行情回调

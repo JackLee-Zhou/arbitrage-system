@@ -27,14 +27,8 @@ const (
 )
 
 // ============================================================
-// 行情数据安全常量
-// ============================================================
-const (
-	MaxValidPrice  = 1e100 // 有效价格上限（超过视为无效数据）
-	MinValidPrice  = 0     // 有效价格下限（<=0 视为无效）
-	MaxValidVolume = 1e12  // 有效成交量上限
-)
-
+// 注意：MaxValidPrice/MinValidPrice/MaxValidVolume 在 domain/normalizer.go 定义。
+// adapters/ctp 不重复定义，使用时引用 domain 包。
 // ============================================================
 // CThostFtdcDepthMarketDataField Go 侧映射
 // CTP C 结构体的字段映射 —— 仅行情订阅需要的字段

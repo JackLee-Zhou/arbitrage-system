@@ -3,7 +3,6 @@ package domain
 
 import (
 	"fmt"
-	"math"
 	"time"
 )
 
@@ -63,6 +62,24 @@ type RawMarketData struct {
 	BidVolume1         int64
 	AskPrice1          float64
 	AskVolume1         int64
+
+	// 5 档深度（保留完整数据，StandardTick 仅用第1档）
+	BidPrice2  float64
+	BidVolume2 int64
+	BidPrice3  float64
+	BidVolume3 int64
+	BidPrice4  float64
+	BidVolume4 int64
+	BidPrice5  float64
+	BidVolume5 int64
+	AskPrice2  float64
+	AskVolume2 int64
+	AskPrice3  float64
+	AskVolume3 int64
+	AskPrice4  float64
+	AskVolume4 int64
+	AskPrice5  float64
+	AskVolume5 int64
 }
 
 // ============================================================
@@ -200,6 +217,3 @@ func (t *StandardTick) ToProto() *ProtoTick {
 		AskVolume1:   t.AskVolume1,
 	}
 }
-
-// Ensure math is used (safePrice may use NaN checking in future)
-var _ = math.MaxFloat64

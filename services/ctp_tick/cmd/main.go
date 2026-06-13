@@ -71,7 +71,13 @@ func main() {
 	mux.Handle("/healthz", healthChecker)
 	mux.Handle("/metrics", metrics)
 
-	httpServer := &http.Server{Addr: ":" + cfg.HealthPort, Handler: mux}
+	httpServer := &http.Server{
+		Addr:         ":" + cfg.HealthPort,
+		Handler:      mux,
+		ReadTimeout:  10 * time.Second,
+		WriteTimeout: 10 * time.Second,
+		IdleTimeout:  120 * time.Second,
+	}
 	go func() {
 		log.Printf("[ctp_tick] health server on :%s", cfg.HealthPort)
 		if err := httpServer.ListenAndServe(); err != http.ErrServerClosed {
@@ -137,7 +143,9 @@ func main() {
 
 	mdAPI.Close()
 	tickWriter.Close() // 等待 writerLoop 结束 + flush 残余数据
-	_ = httpServer.Shutdown(shutdownCtx)
+	if err := httpServer.Shutdown(shutdownCtx); err != nil {
+		log.Printf("[ctp_tick] HTTP shutdown timeout, force exit")
+	}
 	_ = redisClient.Close()
 
 	log.Printf("[ctp_tick] shutdown complete (received=%d dropped=%d)",
@@ -165,6 +173,23 @@ func convertToRaw(raw *ctp.DepthMarketData) *domain.RawMarketData {
 		BidVolume1:         raw.BidVolume1,
 		AskPrice1:          raw.AskPrice1,
 		AskVolume1:         raw.AskVolume1,
+
+		BidPrice2:  raw.BidPrice2,
+		BidVolume2: raw.BidVolume2,
+		BidPrice3:  raw.BidPrice3,
+		BidVolume3: raw.BidVolume3,
+		BidPrice4:  raw.BidPrice4,
+		BidVolume4: raw.BidVolume4,
+		BidPrice5:  raw.BidPrice5,
+		BidVolume5: raw.BidVolume5,
+		AskPrice2:  raw.AskPrice2,
+		AskVolume2: raw.AskVolume2,
+		AskPrice3:  raw.AskPrice3,
+		AskVolume3: raw.AskVolume3,
+		AskPrice4:  raw.AskPrice4,
+		AskVolume4: raw.AskVolume4,
+		AskPrice5:  raw.AskPrice5,
+		AskVolume5: raw.AskVolume5,
 	}
 }
 
