@@ -95,7 +95,7 @@ if price_change > PRICE_SPIKE_THRESHOLD:
 
 这一条是对**架构中所有硬编码数值**（AI 评分老化 15min/30min、alpha=0.2、止损 0.5%、紧急触发 1%、防抖 5 分钟 等）的代码级约束。
 
-### 规则 7：Redis 连接统一初始化（pkg/redis/）
+### 规则 7：Go 服务 Redis 连接统一初始化（pkg/redis/）
 - 所有 Go 服务**必须**通过 `pkg/redis/` 包操作 Redis，**禁止**各服务独立创建 `*redis.Client`
 - `pkg/redis.NewAdapter(addr)` 是唯一的 Redis 连接创建入口
 - 各服务的 `adapters/redis/` 只保留**业务逻辑**（如 Tick 双写、消费组订阅），Redis 连接本身通过依赖注入获取 `pkg/redis.RedisClient` 接口
@@ -129,13 +129,13 @@ arbitrage-system/
 ├── .env.example
 ├── Makefile               ← 顶层快捷命令
 ├── contracts/             ← Protobuf 契约 SSOT
-├── pkg/                   ← 项目级共享 Go 包（如 pkg/redis/）
+├── pkg/                   ← Go 共享包（如 pkg/redis/），Python 服务不适用
 ├── services/              ← 9 个微服务
 ├── scripts/               ← 运维脚本
 └── docs/                  ← 架构文档
 ```
 
-⚠️ **`pkg/` 仅限项目级共享基础设施**（如 `pkg/redis/` 统一 Redis 连接）。禁止往 `pkg/` 放通用工具函数或业务逻辑——业务代码归属 `services/`。
+⚠️ **`pkg/` 仅限 Go 共享基础设施**（如 `pkg/redis/` 统一 Redis 连接），Python 服务不适用此目录。禁止往 `pkg/` 放通用工具函数或业务逻辑——业务代码归属 `services/`。
 
 ### 单个服务目录约定（每个 services/ 下的子目录）
 
