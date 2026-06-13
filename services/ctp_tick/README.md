@@ -7,25 +7,27 @@
 
 ## 服务定位（一句话）
 
-订阅 CTP（中国期货交易所）行情，将原始 Tick 标准化后写入 Redis Stream（让 trading_agent 消费 + 让 db_writer 持久化）。
+启动时通过 TD API 查询**全市场期货合约**并全部订阅。所有合约 Tick → `write:tick` 异步批量落库；用户关注合约（SUBSCRIBE_SYMBOLS）额外 → `tick:<symbol>` 近实时推送分析层。
 
 ---
 
 ## 职责
 
 ### 做什么 ✅
-- 通过 cgo 封装 [`openctp/ctp-go`](https://github.com/openctp/openctp) 连接 CTP 前置机
-- 订阅指定合约（V1：`MA2509` 甲醇主力；V2 加更多）
-- 接收 `OnRtnDepthMarketData` 回调，标准化为 protobuf `Tick` 消息
-- 写入 Redis Stream `tick:<symbol>` 供 trading_agent 消费
-- 写入 Redis Stream `write:tick` 供 db_writer 持久化到 InfluxDB
-- 自动重连：CTP 收盘断线（每日 15:15 / 23:00）→ 次日开盘前自动重连
+- 启动时通过 **TD API** 查询六大交易所全市场期货合约（ProductClass='1'）
+- 通过 **MD API** 订阅全市场 ~330 个期货合约
+- 接收 `OnRtnDepthMarketData` 回调，**非阻塞**发送到异步写入管道（buffer 10000）
+- 全部合约：批量攒批（100 条/1 秒）→ `write:tick` → db_writer 落库
+- 关注合约（SUBSCRIBE_SYMBOLS）：逐笔近实时 → `tick:<symbol>` → trading_agent 消费
+- 标准化为 protobuf `Tick` 消息（domain/normalizer.go）
+- 自动重连：滑动窗口限频（60s / 3 次），指数退避（10s/20s/30s）
 
 ### 不做什么 ❌
 - 不算技术指标（那是 trading_agent.domain.indicator 的事）
 - 不做交易决策
-- **不直接写 InfluxDB**（统一走 db_writer 串行化，参考 ARCHITECTURE.md 机制 2）
+- **不直接写 InfluxDB**（统一走 db_writer 串行化）
 - 不报单（那是 trading_agent.adapters.broker 的事）
+- **CTP 回调线程不阻塞**（非阻塞 channel send，满则丢弃）
 
 ---
 
@@ -40,14 +42,18 @@ ctp_tick/
 ├── cmd/main.go                 ← 入口：装配 + 启动
 ├── internal/
 │   ├── domain/                 ← 业务逻辑（零外部依赖）
-│   │   └── normalizer.go         CTP 数据 → Tick proto 标准化
+│   │   └── normalizer.go         CTP → Tick 标准化 + 安全过滤
 │   ├── adapters/               ← 外部 IO
 │   │   ├── ctp/                  cgo 封装 openctp/ctp-go
-│   │   │   ├── md.go               行情接口（Market Data）
+│   │   │   ├── md.go               行情接口（MD API）
+│   │   │   ├── md_mock.go          macOS mock 行情（//go:build !ctp）
+│   │   │   ├── td.go               ⭐ TD API 全市场合约查询（//go:build ctp）
+│   │   │   ├── td_mock.go          Mock 合约列表（//go:build !ctp）
 │   │   │   ├── spi.go              CTP 回调实现
 │   │   │   ├── reconnect.go        断线重连逻辑
-│   │   │   └── types.go            CTP C 结构 ↔ Go struct
-│   │   ├── redis/                Redis Streams 写入
+│   │   │   └── types.go            CTP 类型 + 接口定义
+│   │   ├── redis/                ⭐ 异步写入管道
+│   │   │   └── writer.go           TickWriter（batch 100条/1s + 逐笔 focus）
 │   │   └── config/               Viper 配置加载
 │   └── api/                    ← 对外端点
 │       ├── healthz.go            GET /healthz
@@ -61,12 +67,14 @@ ctp_tick/
 
 | 文件 | 职责 |
 |---|---|
-| `cmd/main.go` | 装配（不写业务）+ 启动重连循环 |
-| `domain/normalizer.go` | CTP 字段 → Tick proto 字段映射（**纯函数**） |
-| `adapters/ctp/md.go` | 注册前置机、登录、订阅 |
-| `adapters/ctp/spi.go` | 实现 `CThostFtdcMdSpi` 回调 |
-| `adapters/ctp/reconnect.go` | 检测断线 + 指数退避重连 |
-| `adapters/redis/writer.go` | XADD 到 `tick:<symbol>` 和 `write:tick` |
+| `cmd/main.go` | DI 装配：TD 合约查询 → MD 全量订阅 → 异步回调注册 |
+| `domain/normalizer.go` | CTP → StandardTick → ProtoTick 纯函数转换 |
+| `adapters/ctp/md.go` | MD API：注册前置机 → 登录 → 全量订阅 |
+| `adapters/ctp/td.go` | TD API：查询 6 交易所 → 过滤期货合约 |
+| `adapters/ctp/spi.go` | CThostFtdcMdSpi 回调：OnFrontConnected / OnRtnDepthMarketData |
+| `adapters/ctp/reconnect.go` | 断线重连：滑动窗口（60s / 3 次）+ 指数退避 |
+| `adapters/ctp/types.go` | 类型定义 + MarketDataSubscriber / ContractQuerier 接口 |
+| `adapters/redis/writer.go` | TickWriter：非阻塞 Send → writerLoop（batch 100/1s + focus 逐笔） |
 
 ---
 
@@ -83,9 +91,23 @@ ctp_tick/
 
 | 目的 | Stream/Key | 频率 | 内容 |
 |---|---|---|---|
-| 业务流 | `tick:MA2509` (Stream) | ~2 笔/秒 | proto 编码的 Tick 消息 |
-| 持久化流 | `write:tick` (Stream) | 同上 | 同上（让 db_writer 写 InfluxDB） |
+| 持久化流 | `write:tick` (Stream) | 批量 100 条/1 秒 | **全市场**合约 Tick → db_writer 落库 |
+| 业务流 | `tick:<symbol>` (Stream) | 逐笔近实时 | **仅关注合约** → trading_agent 分析 |
 | 服务注册 | `services:ctp_tick` (KV) | 10 秒续约 | ServiceInfo 30s TTL |
+
+### 数据流（v0.2.0）
+
+```
+启动时：TD API → 查询 6 交易所 → filter ProductClass='1' → ~330 期货合约
+            └→ MD API.SubscribeMarketData(allSymbols)
+
+每 Tick：CTP 回调线程（绝对不能阻塞）
+            └→ tickWriter.Send() — 非阻塞 channel send (buffer 10000)
+                 │
+                 └→ writerLoop goroutine:
+                      ├→ 攒批 100 条/1s → pipeline XADD write:tick
+                      └→ if ∈ SUBSCRIBE_SYMBOLS → 逐笔 XADD tick:<symbol>
+```
 
 ### 不消费任何输入
 （纯生产者）
@@ -125,7 +147,7 @@ CTP_PASSWORD=<your-password>
 CTP_APP_ID=simnow_client_test
 CTP_AUTH_CODE=0000000000000000
 
-# 订阅合约清单
+# 关注合约（全市场合约自动查询 + 订阅，只有这些额外推送分析层）
 SUBSCRIBE_SYMBOLS=MA2509
 
 LOG_LEVEL=info
@@ -202,14 +224,20 @@ CTP 库（openctp/ctp-go）依赖 Linux .so 动态库，**macOS 上无法编译�
 每月 15 日前后，主力合约会从近月切到远月（如 MA2509 → MA2601）。
 V1 阶段需手动改 `SUBSCRIBE_SYMBOLS`，V2 计划自动检测。
 
-### 5. ⚠️ Tick 高峰丢包风险
+### 5. ⚠️ tickChannel 满丢弃
 
-夜盘开盘瞬间 Tick 频率可能 ≥ 5 笔/秒。
+异步管道 buffer=10000，极端行情（全市场 ~330 合约 tick 密集涌入）可能溢出。
 
 **缓解**：
-- Redis Stream 写入用 pipeline 批量
-- Redis 持久化 AOF + maxmemory-policy=allkeys-lru
-- 监控 Stream 长度，超过 10000 推钉钉告警
+- buffer 足够容纳 330 合约 × 10 条 = 3300 条（留足余量）
+- 丢弃时每 1000 条记一次 WARNING 日志
+- `/metrics` 端点暴露 `redis_write_failure_total` 监控丢弃量
+
+### 6. ⚠️ TD API 查询超时
+
+全市场合约查询需 30 秒超时，SimNow 环境偶发超时导致回退使用 SUBSCRIBE_SYMBOLS。
+
+**缓解**：超时后日志记录 → 降级为仅订阅关注合约 → 服务继续运行
 
 ---
 
@@ -236,3 +264,4 @@ V1 阶段需手动改 `SUBSCRIBE_SYMBOLS`，V2 计划自动检测。
 | 版本 | 日期 | 变更 |
 |---|---|---|
 | v1.0 | 2026-06-13 | 初版 |
+| v1.1 | 2026-06-13 | 全市场合约订阅（TD API + MD API 全量）+ 异步批量落库（100条/1s）+ 关注合约近实时推送 |
