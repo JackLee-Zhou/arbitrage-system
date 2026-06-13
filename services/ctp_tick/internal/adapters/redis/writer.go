@@ -8,6 +8,8 @@ import (
 	"log"
 	"time"
 
+	"github.com/redis/go-redis/v9"
+
 	"github.com/arbitrage-system/ctp_tick/internal/domain"
 )
 
@@ -19,6 +21,8 @@ const (
 	RetryBackoffBase = 500 * time.Millisecond
 	StreamMaxLen     = 10000 // 保留最近 10000 条
 	WriteTimeout     = 3 * time.Second
+	RedisDialTimeout = 5 * time.Second
+	RedisMaxRetries  = -1 // go-redis 内置无限重试
 )
 
 // ============================================================
@@ -110,36 +114,44 @@ func (w *TickWriter) Close() error {
 }
 
 // ============================================================
-// GoRedisClient — go-redis 适配器（实现 RedisClient 接口）
+// GoRedisAdapter — go-redis 客户端适配器
 // ============================================================
 
-// GoRedisAdapter 将 go-redis 客户端适配为 RedisClient 接口
-// 等 go-redis 加到 go.mod 后启用
+// GoRedisAdapter 封装 *redis.Client，实现 RedisClient 接口
 type GoRedisAdapter struct {
-	// TODO: 内嵌 *redis.Client
-	addr string
+	client *redis.Client
 }
 
-// NewGoRedisAdapter 创建 go-redis 适配器
+// NewGoRedisAdapter 创建 go-redis 客户端，连接 Redis 服务器
+// addr 格式: "host:port"（Docker DNS 名 "redis:6379" 或 "127.0.0.1:6379"）
 func NewGoRedisAdapter(addr string) *GoRedisAdapter {
-	return &GoRedisAdapter{addr: addr}
+	rdb := redis.NewClient(&redis.Options{
+		Addr:         addr,
+		DialTimeout:  RedisDialTimeout,
+		ReadTimeout:  WriteTimeout,
+		WriteTimeout: WriteTimeout,
+		MaxRetries:   RedisMaxRetries, // go-redis 内置无限重试
+	})
+	return &GoRedisAdapter{client: rdb}
 }
 
-// XAdd go-redis 实现
+// XAdd 写入 Redis Stream
+// 对应 ENGINEERING_GUIDE.md 的 Redis Key 规范：tick:<symbol> / write:tick
 func (a *GoRedisAdapter) XAdd(ctx context.Context, stream string, values map[string]interface{}) error {
-	// TODO: 使用 go-redis client.XAdd(ctx, &redis.XAddArgs{...})
-	log.Printf("[redis] XADD %s (mock)", stream)
-	return nil
+	return a.client.XAdd(ctx, &redis.XAddArgs{
+		Stream: stream,
+		MaxLen: StreamMaxLen, // 保留最近 10000 条
+		Approx: true,         // 近似裁剪（性能优先）
+		Values: values,
+	}).Err()
 }
 
-// Ping go-redis 实现
+// Ping 健康检查（PING 命令）
 func (a *GoRedisAdapter) Ping(ctx context.Context) error {
-	log.Printf("[redis] PING (mock)")
-	return nil
+	return a.client.Ping(ctx).Err()
 }
 
-// Close go-redis 实现
+// Close 释放 Redis 连接池
 func (a *GoRedisAdapter) Close() error {
-	log.Printf("[redis] close (mock)")
-	return nil
+	return a.client.Close()
 }
