@@ -59,40 +59,40 @@ func getEnv(key, fallback string) string {
 
 func handleOverview(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
-	w.Write([]byte(`{"status":"ok","service":"orchestrator"}`))
+	_, _ = w.Write([]byte(`{"status":"ok","service":"orchestrator"}`))
 }
 
 func handlePositions(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
-	w.Write([]byte(`{"positions":[]}`))
+	_, _ = w.Write([]byte(`{"positions":[]}`))
 }
 
 func handleEmergencyClose(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
-	w.Write([]byte(`{"success":true,"message":"emergency_close_requested"}`))
+	_, _ = w.Write([]byte(`{"success":true,"message":"emergency_close_requested"}`))
 }
 
 func handleStrategies(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
-	w.Write([]byte(`{"strategies":[]}`))
+	_, _ = w.Write([]byte(`{"strategies":[]}`))
 }
 
 func handleRisk(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
-	w.Write([]byte(`{"risk_params":{}}`))
+	_, _ = w.Write([]byte(`{"risk_params":{}}`))
 }
 
 func handleWebSocket(w http.ResponseWriter, r *http.Request) {
 	// TODO: 实现 WebSocket 升级 + 实时状态推送
-	w.Write([]byte("websocket endpoint"))
+	_, _ = w.Write([]byte("websocket endpoint"))
 }
 
 func handleHealthz(w http.ResponseWriter, r *http.Request) {
-	w.Write([]byte(`{"service":"orchestrator","status":"healthy"}`))
+	_, _ = w.Write([]byte(`{"service":"orchestrator","status":"healthy"}`))
 }
 
 func handleMetrics(w http.ResponseWriter, r *http.Request) {
-	w.Write([]byte("# placeholder metrics\n"))
+	_, _ = w.Write([]byte("# placeholder metrics\n"))
 }
 
 // withMiddleware 应用中间件（日志、交易时段守卫等）

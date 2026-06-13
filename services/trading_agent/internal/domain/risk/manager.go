@@ -11,11 +11,11 @@ type RiskCheckResult struct {
 
 // Manager 风控管理器
 type Manager struct {
-	MaxPosition      int     // 最大持仓手数
-	MaxLossPerDay    float64 // 单日最大亏损
-	StopLossPct      float64 // 单笔止损比例
-	DailyPnL         float64 // 当日累计盈亏
-	CurrentPosition  int     // 当前持仓
+	MaxPosition     int     // 最大持仓手数
+	MaxLossPerDay   float64 // 单日最大亏损
+	StopLossPct     float64 // 单笔止损比例
+	DailyPnL        float64 // 当日累计盈亏
+	CurrentPosition int     // 当前持仓
 }
 
 // CheckNewOrder 检查是否允许新增报单

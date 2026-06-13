@@ -87,8 +87,8 @@ lint-python: ## ruff（Python 服务）
 		echo "  ⚠️  ruff not installed — skipping"; \
 		echo "  Install: pip install ruff"; \
 	else \
-		cd services/llm_scorer && ruff check . 2>&1 || exit 1; \
-		cd services/intel_collector && ruff check . 2>&1 || exit 1; \
+		(cd services/llm_scorer && ruff check .) || exit 1; \
+		(cd services/intel_collector && ruff check .) || exit 1; \
 		echo "  ✅ Python lint 通过"; \
 	fi
 

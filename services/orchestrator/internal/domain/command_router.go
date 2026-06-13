@@ -14,8 +14,8 @@ type Command struct {
 
 // CommandResult 指令执行结果
 type CommandResult struct {
-	Success bool
-	Message string
+	Success  bool
+	Message  string
 	OrderIDs []string // 紧急平仓返回的 order ID 列表
 }
 

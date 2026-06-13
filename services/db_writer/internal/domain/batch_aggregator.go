@@ -5,8 +5,8 @@ import "time"
 
 // BatchRule 批量聚合规则
 type BatchRule struct {
-	MaxSize   int           // 最大条数（默认 100）
-	MaxWait   time.Duration // 最大等待时间（默认 1s）
+	MaxSize int           // 最大条数（默认 100）
+	MaxWait time.Duration // 最大等待时间（默认 1s）
 }
 
 // ShouldFlush 判断是否应触发批量写入

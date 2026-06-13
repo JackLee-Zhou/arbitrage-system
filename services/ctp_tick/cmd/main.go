@@ -21,7 +21,7 @@ func main() {
 	redisClient := connectWithRetry(cfg.RedisAddr, 60*time.Second)
 	defer func() {
 		if redisClient != nil {
-			redisClient.Close()
+			_ = redisClient.Close()
 		}
 	}()
 
@@ -79,13 +79,13 @@ func connectWithRetry(addr string, timeout time.Duration) *RedisClient {
 func startHealthServer(port string) {
 	http.HandleFunc("/healthz", func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusOK)
-		w.Write([]byte(`{"service":"ctp_tick","status":"healthy"}`))
+		_, _ = w.Write([]byte(`{"service":"ctp_tick","status":"healthy"}`))
 	})
 	http.HandleFunc("/metrics", func(w http.ResponseWriter, r *http.Request) {
-		w.Write([]byte("# placeholder metrics\n"))
+		_, _ = w.Write([]byte("# placeholder metrics\n"))
 	})
 	log.Printf("[ctp_tick] health server on :%s", port)
-	http.ListenAndServe(":"+port, nil)
+	log.Fatal(http.ListenAndServe(":"+port, nil))
 }
 
 func subscribeMarketData(ctx context.Context, client *RedisClient, cfg Config) {

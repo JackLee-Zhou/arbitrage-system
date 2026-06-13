@@ -345,6 +345,43 @@ except:                          # 永远别这样
 - `fix/<服务名>-<简述>`：单服务 bug 修复
 - `chore/<简述>`：非业务改动（依赖升级 / 文档等）
 
+### 分支工作流规则（不可妥协）
+
+**任何新模块、新功能的开发，必须先切分支，禁止直接在 `main` 或 `dev` 上提交。**
+
+```
+1. git checkout -b feature/<服务名>-<简述>    ← 从 dev 切出功能分支
+2. 在分支上开发 + 提交
+3. make check                                ← 本地验证：lint + vet + test 全部通过
+4. git push origin <branch>
+5. 创建 PR → 合并到 dev
+6. dev 验证通过后 → 合并到 main
+```
+
+**合并前必须满足**：
+- `make check` 全部通过（go vet + golangci-lint + ruff + go test + pytest）
+- PR 上 GitHub Actions CI 全绿
+- 代码 review（如有人协助）
+
+**紧急修复（hotfix）例外**：
+- 可以从 `main` 切 `fix/<简述>` 分支
+- 修复后合并回 `main` **和** `dev`
+- 仍需通过 `make check` + CI
+
+```bash
+# 正确流程 ✅
+git checkout -b feature/ctp_tick-add-symbol-filter
+# ... 开发 ...
+make check
+git add -A && git commit -m "feat(ctp_tick): ..."
+git push origin feature/ctp_tick-add-symbol-filter
+
+# 错误 ❌
+git checkout main
+# ... 直接改代码 ...
+git commit -m "fix something"  # 不允许！
+```
+
 ### Commit Message（Conventional Commits）
 
 ```

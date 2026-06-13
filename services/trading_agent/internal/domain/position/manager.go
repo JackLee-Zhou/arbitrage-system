@@ -4,14 +4,14 @@ package position
 
 // Position 持仓信息
 type Position struct {
-	Symbol       string
-	Direction    string  // "long" / "short"
-	Volume       int
-	AvgPrice     float64
-	LastPrice    float64
-	FloatPnL     float64
-	TodayVolume  int
-	YdVolume     int
+	Symbol      string
+	Direction   string // "long" / "short"
+	Volume      int
+	AvgPrice    float64
+	LastPrice   float64
+	FloatPnL    float64
+	TodayVolume int
+	YdVolume    int
 }
 
 // Manager 持仓管理器

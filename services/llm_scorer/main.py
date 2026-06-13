@@ -15,6 +15,8 @@ logging.basicConfig(
 )
 logger = logging.getLogger("llm_scorer")
 
+_shutdown_requested = False
+
 app = FastAPI(title="llm_scorer", version="0.1.0")
 
 
@@ -50,7 +52,16 @@ async def scoring_loop(symbol: str, interval_sec: int):
         await asyncio.sleep(interval_sec)
 
 
+def _handle_shutdown(signum, frame):
+    global _shutdown_requested
+    logger.info(f"Received signal {signum}, shutting down...")
+    _shutdown_requested = True
+
+
 async def main():
+    signal.signal(signal.SIGINT, _handle_shutdown)
+    signal.signal(signal.SIGTERM, _handle_shutdown)
+
     symbol = os.getenv("SYMBOL", "MA2509")
     interval = int(os.getenv("SCORE_INTERVAL_SEC", "300"))
 
