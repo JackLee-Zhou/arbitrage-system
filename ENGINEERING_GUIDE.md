@@ -8,13 +8,15 @@
 ## 0. 阅读顺序（任何人/agent 第一次接手必读）
 
 ```
-1. ENGINEERING_GUIDE.md（本文档） — 工程规则
-2. docs/ARCHITECTURE.md           — 架构方案（v2.3，约 2600 行）
-3. contracts/README.md             — 跨服务契约管理
-4. services/<你要改的模块>/README.md — 该模块详细文档
+1. ENGINEERING_GUIDE.md（本文档）        — 工程规则
+2. docs/QUESTION_DEAL.md                 — ⚠️ 全局问题汇总（先看有没有已知坑）
+3. docs/ARCHITECTURE.md                  — 架构方案（v2.3，约 2600 行）
+4. contracts/README.md                   — 跨服务契约管理
+5. services/<你要改的模块>/README.md      — 该模块详细文档
+6. services/<你要改的模块>/QUESTION.md   — 该模块已知问题和修复记录
 ```
 
-读完上述 4 个文档**之后**再开始写代码。
+读完上述 6 个文档**之后**再开始写代码。
 
 ---
 
