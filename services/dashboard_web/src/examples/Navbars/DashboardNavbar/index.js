@@ -148,10 +148,10 @@ function DashboardNavbar({ absolute, light, isMini }) {
               <IconButton
                 size="small"
                 color="inherit"
-                sx={navbarIconButton}
+                sx={{ ...navbarIconButton, fontSize: "26px" }}
                 onClick={handleConfiguratorOpen}
               >
-                <Icon>settings</Icon>
+                <Icon sx={{ fontSize: "26px" }}>settings</Icon>
               </IconButton>
             </VuiBox>
           </VuiBox>

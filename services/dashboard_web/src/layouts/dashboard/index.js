@@ -1,302 +1,299 @@
 // ============================================================================
-// Overview — 概览首页（三区汇总）
-// 顶部 KPI 卡片使用 useTradingStore / useSystemStore 实时数据
-// OPT-302 将实现完整三区卡片布局
+// Overview — Precision Trading Terminal Dashboard
 // ============================================================================
 
-import { useMemo, useState, useEffect } from "react";
-import { useHistory } from "react-router-dom";
+import { Link as RouterLink } from "react-router-dom";
 import Grid from "@mui/material/Grid";
 import { Card, Box } from "@mui/material";
 
 import DashboardLayout from "examples/LayoutContainers/DashboardLayout";
 import DashboardNavbar from "examples/Navbars/DashboardNavbar";
-import MiniStatisticsCard from "examples/Cards/StatisticsCards/MiniStatisticsCard";
 import VuiBox from "components/VuiBox";
 import VuiTypography from "components/VuiTypography";
-
-import { IoWallet } from "react-icons/io5";
-import { IoGlobe } from "react-icons/io5";
-import { IoStatsChart } from "react-icons/io5";
-import { IoTrendingUp } from "react-icons/io5";
 
 import useTradingStore from "stores/trading";
 import useSystemStore from "stores/system";
 
+import { COLORS } from "theme/tokens";
+
+import { IoTrendingUp, IoWallet, IoStatsChart, IoPulse } from "react-icons/io5";
+
+// ---- Thin accent border helper ---------------------------------------------
+const accentBorder = {
+  position: "relative",
+  "&::after": {
+    content: '""',
+    position: "absolute",
+    top: 0,
+    left: 0,
+    right: 0,
+    height: "1px",
+    background: `linear-gradient(90deg, ${COLORS.CYAN}44, transparent 70%)`,
+    borderRadius: "inherit",
+  },
+};
+
+// ---- Stat block ------------------------------------------------------------
+function StatBlock({ label, value, sub, accent, icon, to }) {
+  return (
+    <Card
+      component={to ? RouterLink : "div"}
+      to={to}
+      sx={{
+        p: 2.5,
+        background: COLORS.BG_SURFACE,
+        border: `1px solid ${COLORS.BORDER_SUBTLE}`,
+        transition: "border-color 200ms, box-shadow 200ms",
+        cursor: to ? "pointer" : "default",
+        textDecoration: "none",
+        "&:hover": to
+          ? {
+              border: `1px solid ${COLORS.BORDER_ACTIVE}`,
+              boxShadow: COLORS.GLOW.CARD_HOVER,
+            }
+          : {},
+        ...accentBorder,
+      }}
+    >
+      <VuiBox display="flex" alignItems="center" gap={1} mb={1}>
+        <VuiBox
+          sx={{
+            width: 36,
+            height: 36,
+            borderRadius: "8px",
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+            background: `linear-gradient(135deg, ${accent}22, ${accent}08)`,
+            color: accent,
+            fontSize: "18px",
+          }}
+        >
+          {icon}
+        </VuiBox>
+        <VuiTypography variant="caption" color="text" fontWeight="medium" textTransform="uppercase" letterSpacing="0.5px">
+          {label}
+        </VuiTypography>
+      </VuiBox>
+      <VuiTypography variant="h4" color="white" fontWeight="bold" mb={0.5}
+        sx={{ fontFamily: "'Roboto Mono', monospace", letterSpacing: "-0.5px" }}>
+        {value}
+      </VuiTypography>
+      {sub && (
+        <VuiTypography variant="caption" color="text">
+          {sub}
+        </VuiTypography>
+      )}
+    </Card>
+  );
+}
+
+// ---- Dot indicator ----------------------------------------------------------
+function Dot({ color }) {
+  return (
+    <Box
+      sx={{
+        width: 6,
+        height: 6,
+        borderRadius: "50%",
+        bgcolor: color,
+        boxShadow: `0 0 6px ${color}`,
+        display: "inline-block",
+        mr: 0.5,
+      }}
+    />
+  );
+}
+
+// ============================================================================
 function Overview() {
-  const history = useHistory();
   const { positions, totalFloatPnL, aiScores, todayOrders, todayTrades } = useTradingStore();
-  const { services, systemMode, alerts } = useSystemStore();
-  const [now, setNow] = useState(Date.now());
-  useEffect(() => {
-    const id = setInterval(() => setNow(Date.now()), 1000);
-    return () => clearInterval(id);
-  }, []);
+  const { services, systemMode, alerts, wsStatus } = useSystemStore();
 
-  // ---- 当前价格 ----
-  const currentPrice = useMemo(() => {
-    const posKeys = Object.keys(positions);
-    if (posKeys.length === 0) return null;
-    // 优先使用 selectedSymbol，否则取第一个
-    const firstPos = positions[posKeys[0]];
-    return firstPos?.lastPrice ?? firstPos?.price ?? null;
-  }, [positions]);
+  const positionCount = Object.keys(positions).length;
+  const scoreEntries = Object.entries(aiScores);
+  const liveScore = scoreEntries.find(([, v]) => v.type !== "shadow");
+  const serviceList = Object.entries(services);
+  const healthyCount = serviceList.filter(([, s]) => s.status === "healthy").length;
+  const totalServices = serviceList.length || 9;
 
-  const priceLabel = useMemo(() => {
-    const posKeys = Object.keys(positions);
-    if (posKeys.length === 0) return "---";
-    return currentPrice != null ? currentPrice.toFixed(1) : "---";
-  }, [currentPrice, positions]);
-
-  const pricePercentage = useMemo(() => {
-    const posKeys = Object.keys(positions);
-    if (posKeys.length === 0) return { color: "text", text: "等待数据" };
-    const firstPos = positions[posKeys[0]];
-    const changePct = firstPos?.changePct;
-    if (changePct != null) {
-      return {
-        color: changePct >= 0 ? "success" : "error",
-        text: `${changePct >= 0 ? "+" : ""}${changePct.toFixed(2)}%`,
-      };
-    }
-    return { color: "text", text: posKeys[0] };
-  }, [positions, currentPrice]);
-
-  // ---- 浮动盈亏 ----
-  const pnlDisplay = useMemo(() => {
-    if (totalFloatPnL == null || totalFloatPnL === 0) return "¥0";
-    const prefix = totalFloatPnL > 0 ? "+" : "";
-    return `¥${prefix}${totalFloatPnL.toFixed(0)}`;
-  }, [totalFloatPnL]);
-
-  const pnlColor = useMemo(() => {
-    if (totalFloatPnL == null || totalFloatPnL === 0) return "text";
-    return totalFloatPnL > 0 ? "success" : "error";
-  }, [totalFloatPnL]);
-
-  const pnlText = useMemo(() => {
-    if (totalFloatPnL == null || totalFloatPnL === 0) return "持平";
-    return totalFloatPnL > 0 ? "浮盈" : "浮亏";
-  }, [totalFloatPnL]);
-
-  // ---- AI 评分 ----
-  const aiScoreEntry = useMemo(() => {
-    const keys = Object.keys(aiScores);
-    if (keys.length === 0) return null;
-    const firstKey = keys[0];
-    const entry = aiScores[firstKey];
-    if (!entry) return null;
-    const score = entry.overallScore ?? entry.score;
-    const label = entry.overallLabel ?? entry.label ?? firstKey;
-    return { score, label, keyDrivers: entry.keyDrivers ?? [] };
-  }, [aiScores]);
-
-  const aiScoreDisplay = useMemo(() => {
-    if (!aiScoreEntry || aiScoreEntry.score == null) return "---";
-    return aiScoreEntry.score.toFixed(0);
-  }, [aiScoreEntry]);
-
-  const aiScorePercentage = useMemo(() => {
-    if (!aiScoreEntry) return { color: "text", text: "等待数据" };
-    const driver = aiScoreEntry.keyDrivers[0] || aiScoreEntry.label;
-    return { color: "info", text: driver || "评分就绪" };
-  }, [aiScoreEntry]);
-
-  // ---- 服务健康 ----
-  const serviceCount = useMemo(() => {
-    const keys = Object.keys(services);
-    if (keys.length === 0) return { healthy: 0, total: 9 };
-    const healthy = keys.filter((k) => {
-      const s = services[k];
-      return s?.status === "online" || s?.status === "healthy" || s?.alive === true;
-    }).length;
-    return { healthy, total: Math.max(keys.length, 9) };
-  }, [services]);
-
-  const healthPercentage = useMemo(() => {
-    const { healthy, total } = serviceCount;
-    if (healthy === 0) return { color: "text", text: "等待巡检" };
-    if (healthy === total) return { color: "success", text: "全部在线" };
-    if (healthy >= total / 2) return { color: "warning", text: `${healthy}/${total} 在线` };
-    return { color: "error", text: `${healthy}/${total} 在线` };
-  }, [serviceCount]);
-
-  // ---- 盯盘区 ----
-  const orderCount = todayOrders?.length || 0;
-  const tradeCount = todayTrades?.length || 0;
-  const posEntries = Object.entries(positions || {});
-
-  // ---- AI 老化 & 事件 ----
-  const aiAgeSec = useMemo(() => {
-    const ts = Object.values(aiScores).map((s) => (s.timestamp ? new Date(s.timestamp).getTime() : 0)).filter(Boolean);
-    return ts.length ? Math.floor((now - Math.max(...ts)) / 1000) : null;
-  }, [aiScores, now]);
-  const aiAgeStr = aiAgeSec == null ? "---" : aiAgeSec < 60 ? `${aiAgeSec}s` : `${Math.floor(aiAgeSec / 60)}m ${aiAgeSec % 60}s`;
-  const emergencies = useMemo(() => (alerts || []).filter((a) => a.level === "emergency" || a.severity === "high").slice(0, 3), [alerts]);
-  const events = useMemo(() => (alerts || []).slice(0, 20), [alerts]);
-
-  // ---- 系统区 ----
-  const svcEntries = Object.entries(services || {});
-  const isHealthy = (s) => s?.status === "online" || s?.status === "healthy" || s?.alive === true;
-  const go = (p) => () => history.push(p);
+  const wsColor = wsStatus === "connected" ? COLORS.EMERALD : wsStatus === "connecting" ? COLORS.AMBER : COLORS.CRIMSON;
 
   return (
     <DashboardLayout>
       <DashboardNavbar />
       <VuiBox py={3}>
-        {/* ---- 顶部 KPI 卡片 ---- */}
+        {/* ---- Top stat row ---- */}
         <VuiBox mb={3}>
-          <Grid container spacing={3}>
-            <Grid item xs={12} md={6} xl={3}>
-              <MiniStatisticsCard
-                title={{ text: "当前价格", fontWeight: "regular" }}
-                count={priceLabel}
-                percentage={pricePercentage}
-                icon={{ color: "info", component: <IoTrendingUp size="22px" color="white" /> }}
+          <Grid container spacing={2}>
+            <Grid item xs={6} md={3}>
+              <StatBlock
+                label="当前价格"
+                value="---"
+                sub="等待行情"
+                accent={COLORS.CYAN}
+                icon={<IoTrendingUp />}
               />
             </Grid>
-            <Grid item xs={12} md={6} xl={3}>
-              <MiniStatisticsCard
-                title={{ text: "浮动盈亏", fontWeight: "regular" }}
-                count={pnlDisplay}
-                percentage={{ color: pnlColor, text: pnlText }}
-                icon={{ color: pnlColor === "error" ? "error" : "info", component: <IoWallet size="22px" color="white" /> }}
+            <Grid item xs={6} md={3}>
+              <StatBlock
+                label="浮动盈亏"
+                value={positionCount > 0 ? `¥${totalFloatPnL.toFixed(0)}` : "¥0"}
+                sub={positionCount > 0 ? `${positionCount} 个合约` : "无持仓"}
+                accent={totalFloatPnL >= 0 ? COLORS.EMERALD : COLORS.CRIMSON}
+                icon={<IoWallet />}
+                to="/futures/browse"
               />
             </Grid>
-            <Grid item xs={12} md={6} xl={3}>
-              <MiniStatisticsCard
-                title={{ text: "AI 评分", fontWeight: "regular" }}
-                count={aiScoreDisplay}
-                percentage={aiScorePercentage}
-                icon={{ color: "info", component: <IoStatsChart size="22px" color="white" /> }}
+            <Grid item xs={6} md={3}>
+              <StatBlock
+                label="AI 评分"
+                value={liveScore ? `${(liveScore[1].overallScore ?? liveScore[1].score ?? 0).toFixed(0)}` : "---"}
+                sub={liveScore ? `${liveScore[0]}` : "等待数据"}
+                accent={COLORS.VIOLET}
+                icon={<IoStatsChart />}
+                to="/ai/scores"
               />
             </Grid>
-            <Grid item xs={12} md={6} xl={3}>
-              <MiniStatisticsCard
-                title={{ text: "服务健康", fontWeight: "regular" }}
-                count={`${serviceCount.healthy}/${serviceCount.total}`}
-                percentage={healthPercentage}
-                icon={{ color: "info", component: <IoGlobe size="22px" color="white" /> }}
+            <Grid item xs={6} md={3}>
+              <StatBlock
+                label="系统状态"
+                value={`${healthyCount}/${totalServices}`}
+                sub={
+                  <VuiBox display="flex" alignItems="center" gap={1}>
+                    <Dot color={wsColor} />
+                    {wsStatus === "connected" ? "在线" : wsStatus === "connecting" ? "连接中" : "离线"}
+                  </VuiBox>
+                }
+                accent={healthyCount === totalServices ? COLORS.EMERALD : COLORS.AMBER}
+                icon={<IoPulse />}
+                to="/system/nodes"
               />
             </Grid>
           </Grid>
         </VuiBox>
 
-        {/* ---- 2x2 四区卡片 ---- */}
-        <VuiBox mb={3}>
-          <Grid container spacing={3}>
-            {/* -- 📊 盯盘区 -- */}
-            <Grid item xs={12} md={6}>
-              <Card sx={{ height:"100%", display:"flex", flexDirection:"column", justifyContent:"space-between" }}>
-                <VuiBox>
-                  <VuiTypography variant="h6" color="white" fontWeight="bold" mb={1}>📊 盯盘区</VuiTypography>
-                  <VuiTypography variant="h3" color="white" fontWeight="bold">
-                    {priceLabel}
-                    <VuiTypography variant="button" color={pricePercentage.color} fontWeight="bold" ml={1}>{pricePercentage.text}</VuiTypography>
-                  </VuiTypography>
-                  <VuiBox mt={1}>
-                    {posEntries.length === 0 ? (
-                      <VuiTypography variant="caption" color="text">暂无持仓</VuiTypography>
-                    ) : posEntries.slice(0, 3).map(([sym, pos]) => (
-                      <VuiBox key={sym} display="flex" justifyContent="space-between">
-                        <VuiTypography variant="body2" color="white">{sym}</VuiTypography>
-                        <VuiTypography variant="body2" color={pos.floatPnL >= 0 ? "success" : "error"}>
-                          {pos.volume||pos.net||0}手 {pos.floatPnL != null ? `${pos.floatPnL >= 0 ? "+" : ""}${pos.floatPnL.toFixed(0)}` : "---"}
-                        </VuiTypography>
-                      </VuiBox>
-                    ))}
-                  </VuiBox>
-                  <VuiBox display="flex" gap={2} mt={0.5}>
-                    <VuiTypography variant="caption" color="text">今日委托: {orderCount}</VuiTypography>
-                    <VuiTypography variant="caption" color="text">今日成交: {tradeCount}</VuiTypography>
-                  </VuiBox>
-                </VuiBox>
-                <VuiTypography onClick={go("/futures/browse")} variant="button" color="info" sx={{ cursor:"pointer", mt:1, display:"inline-flex", alignItems:"center" }}>
-                  → 点击进入详细
-                </VuiTypography>
-              </Card>
-            </Grid>
+        {/* ---- Four-quadrant grid ---- */}
+        <Grid container spacing={2}>
+          {/* 左上 — 盯盘 */}
+          <Grid item xs={12} md={6}>
+            <Card sx={{ p: 3, background: COLORS.BG_SURFACE, border: `1px solid ${COLORS.BORDER_SUBTLE}`, ...accentBorder, height: "100%" }}>
+              <VuiTypography variant="h6" color="white" fontWeight="bold" mb={2} sx={{ display: "flex", alignItems: "center", gap: 1 }}>
+                <Box sx={{ width: 8, height: 8, borderRadius: "2px", bgcolor: COLORS.CYAN, boxShadow: `0 0 6px ${COLORS.CYAN}` }} />
+                盯盘区
+              </VuiTypography>
+              <Grid container spacing={1.5}>
+                {[
+                  ["今日委托", `${todayOrders.length} 笔`],
+                  ["今日成交", `${todayTrades.length} 笔`],
+                  ["系统模式", systemMode === "normal" ? "正常" : systemMode],
+                  ["活跃持仓", `${positionCount} 个`],
+                ].map(([label, value]) => (
+                  <Grid item xs={6} key={label}>
+                    <VuiTypography variant="caption" color="text" textTransform="uppercase" letterSpacing="0.5px">
+                      {label}
+                    </VuiTypography>
+                    <VuiTypography variant="body1" color="white" fontWeight="medium" fontFamily="'Roboto Mono', monospace">
+                      {value}
+                    </VuiTypography>
+                  </Grid>
+                ))}
+              </Grid>
+            </Card>
+          </Grid>
 
-            {/* -- 🤖 AI 区 -- */}
-            <Grid item xs={12} md={6}>
-              <Card sx={{ height:"100%", display:"flex", flexDirection:"column", justifyContent:"space-between" }}>
-                <VuiBox>
-                  <VuiTypography variant="h6" color="white" fontWeight="bold" mb={1}>🤖 AI 区</VuiTypography>
-                  <VuiTypography variant="h2" color="white" fontWeight="bold">
-                    {aiScoreDisplay}
-                    <VuiTypography variant="button" color="info" fontWeight="bold" ml={1}>{aiScorePercentage.text}</VuiTypography>
-                  </VuiTypography>
-                  <VuiBox display="flex" alignItems="center" mt={1}>
-                    <VuiTypography variant="caption" color="text" mr={1}>老化时间:</VuiTypography>
-                    <VuiTypography variant="body2" color={aiAgeSec != null && aiAgeSec > 300 ? "warning" : "success"}>{aiAgeStr}</VuiTypography>
-                  </VuiBox>
-                  {emergencies.length > 0 && (
-                    <VuiBox mt={1}>
-                      <VuiTypography variant="caption" color="error">紧急事件 ({emergencies.length})</VuiTypography>
-                      {emergencies.map((e, i) => (
-                        <VuiTypography key={i} variant="caption" color="text" display="block">• {e.title || e.message || e.type}</VuiTypography>
-                      ))}
+          {/* 右上 — AI */}
+          <Grid item xs={12} md={6}>
+            <Card sx={{ p: 3, background: COLORS.BG_SURFACE, border: `1px solid ${COLORS.BORDER_SUBTLE}`, ...accentBorder, height: "100%" }}>
+              <VuiTypography variant="h6" color="white" fontWeight="bold" mb={2} sx={{ display: "flex", alignItems: "center", gap: 1 }}>
+                <Box sx={{ width: 8, height: 8, borderRadius: "2px", bgcolor: COLORS.VIOLET, boxShadow: `0 0 6px ${COLORS.VIOLET}` }} />
+                AI 区
+              </VuiTypography>
+              {scoreEntries.length === 0 ? (
+                <VuiTypography variant="body2" color="text">等待 AI 评分数据接入…</VuiTypography>
+              ) : (
+                scoreEntries.slice(0, 3).map(([symbol, data]) => (
+                  <VuiBox key={symbol} mb={1.5} display="flex" justifyContent="space-between" alignItems="center">
+                    <VuiTypography variant="body2" color="white" fontWeight="medium">{symbol}</VuiTypography>
+                    <VuiBox display="flex" alignItems="center" gap={1}>
+                      <VuiTypography variant="body2" color={COLORS.VIOLET} fontWeight="bold" fontFamily="'Roboto Mono', monospace">
+                        {(data.overallScore ?? data.score ?? 0).toFixed(0)}
+                      </VuiTypography>
+                      <VuiTypography variant="caption" color="text">{(data.confidence ?? 0) * 100}%</VuiTypography>
                     </VuiBox>
-                  )}
-                </VuiBox>
-                <VuiTypography onClick={go("/ai/scores")} variant="button" color="info" sx={{ cursor:"pointer", mt:1, display:"inline-flex", alignItems:"center" }}>
-                  → 点击进入详细
-                </VuiTypography>
-              </Card>
-            </Grid>
-
-            {/* -- ⚙️ 系统区 -- */}
-            <Grid item xs={12} md={6}>
-              <Card sx={{ height:"100%", display:"flex", flexDirection:"column", justifyContent:"space-between" }}>
-                <VuiBox>
-                  <VuiTypography variant="h6" color="white" fontWeight="bold" mb={1}>⚙️ 系统区</VuiTypography>
-                  <VuiBox display="flex" flexWrap="wrap" gap={0.5}>
-                    {svcEntries.length === 0 ? (
-                      <VuiTypography variant="caption" color="text">等待服务注册</VuiTypography>
-                    ) : svcEntries.map(([name, svc]) => (
-                      <VuiBox key={name} display="flex" alignItems="center" mr={1.5} mb={0.5}>
-                        <Box component="span" sx={{ width:8, height:8, borderRadius:"50%", display:"inline-block", mr:0.5, bgcolor: isHealthy(svc) ? "success.main" : svc?.status === "warning" ? "warning.main" : "error.main" }} />
-                        <VuiTypography variant="caption" color="text">{name}</VuiTypography>
-                      </VuiBox>
-                    ))}
                   </VuiBox>
-                  <VuiTypography variant="caption" color="text" mt={1} display="block">
-                    系统模式: {systemMode} | 巡检: {serviceCount.healthy}/{serviceCount.total}
-                  </VuiTypography>
-                </VuiBox>
-                <VuiTypography onClick={go("/system/nodes")} variant="button" color="info" sx={{ cursor:"pointer", mt:1, display:"inline-flex", alignItems:"center" }}>
-                  → 点击进入详细
-                </VuiTypography>
-              </Card>
-            </Grid>
-
-            {/* -- 📰 实时事件流 -- */}
-            <Grid item xs={12} md={6}>
-              <Card sx={{ height:"100%", display:"flex", flexDirection:"column", justifyContent:"space-between" }}>
-                <VuiBox>
-                  <VuiTypography variant="h6" color="white" fontWeight="bold" mb={1}>📰 实时事件流</VuiTypography>
-                  <VuiBox sx={{ maxHeight:180, overflowY:"auto" }}>
-                    {events.length === 0 ? (
-                      <VuiTypography variant="body2" color="text">暂无事件</VuiTypography>
-                    ) : events.map((e, i) => (
-                      <VuiBox key={i} display="flex" alignItems="flex-start" mb={0.3}>
-                        <VuiTypography variant="caption" color="text" sx={{ minWidth:55 }}>
-                          {e.timestamp ? new Date(e.timestamp).toLocaleTimeString() : "---"}
-                        </VuiTypography>
-                        <VuiTypography variant="caption" color="white" ml={1}>
-                          {e.title || e.message || e.type || "事件"}
-                        </VuiTypography>
-                      </VuiBox>
-                    ))}
-                  </VuiBox>
-                </VuiBox>
-                <VuiTypography onClick={go("/system/audit")} variant="button" color="info" sx={{ cursor:"pointer", mt:1, display:"inline-flex", alignItems:"center" }}>
-                  → 点击进入详细
-                </VuiTypography>
-              </Card>
-            </Grid>
+                ))
+              )}
+            </Card>
           </Grid>
-        </VuiBox>
+
+          {/* 左下 — 系统 */}
+          <Grid item xs={12} md={6}>
+            <Card sx={{ p: 3, background: COLORS.BG_SURFACE, border: `1px solid ${COLORS.BORDER_SUBTLE}`, ...accentBorder, height: "100%" }}>
+              <VuiTypography variant="h6" color="white" fontWeight="bold" mb={2} sx={{ display: "flex", alignItems: "center", gap: 1 }}>
+                <Box sx={{ width: 8, height: 8, borderRadius: "2px", bgcolor: COLORS.EMERALD, boxShadow: `0 0 6px ${COLORS.EMERALD}` }} />
+                系统区
+              </VuiTypography>
+              <VuiBox display="flex" flexWrap="wrap" gap={1}>
+                {[
+                  "redis", "influxdb", "ctp_tick", "intel_collector", "llm_scorer",
+                  "trading_agent", "orchestrator", "db_writer", "watchdog",
+                ].map((name) => {
+                  const svc = services[name];
+                  const healthy = svc?.status === "healthy";
+                  return (
+                    <VuiBox
+                      key={name}
+                      sx={{
+                        px: 1.5,
+                        py: 0.5,
+                        borderRadius: "4px",
+                        fontSize: "12px",
+                        fontFamily: "'Roboto Mono', monospace",
+                        color: healthy ? COLORS.EMERALD : COLORS.AMBER,
+                        background: healthy ? `${COLORS.EMERALD}10` : `${COLORS.AMBER}10`,
+                        border: `1px solid ${healthy ? COLORS.EMERALD : COLORS.AMBER}22`,
+                      }}
+                    >
+                      <Dot color={healthy ? COLORS.EMERALD : COLORS.AMBER} />
+                      {name}
+                    </VuiBox>
+                  );
+                })}
+              </VuiBox>
+            </Card>
+          </Grid>
+
+          {/* 右下 — 事件流 */}
+          <Grid item xs={12} md={6}>
+            <Card sx={{ p: 3, background: COLORS.BG_SURFACE, border: `1px solid ${COLORS.BORDER_SUBTLE}`, ...accentBorder, height: "100%" }}>
+              <VuiTypography variant="h6" color="white" fontWeight="bold" mb={2} sx={{ display: "flex", alignItems: "center", gap: 1 }}>
+                <Box sx={{ width: 8, height: 8, borderRadius: "2px", bgcolor: COLORS.AMBER, boxShadow: `0 0 6px ${COLORS.AMBER}` }} />
+                实时事件
+              </VuiTypography>
+              {alerts.length === 0 ? (
+                <VuiTypography variant="body2" color="text">暂无事件，系统运行正常</VuiTypography>
+              ) : (
+                alerts.slice(0, 5).map((alert, i) => (
+                  <VuiBox
+                    key={i}
+                    sx={{
+                      py: 1,
+                      borderBottom: i < Math.min(alerts.length, 5) - 1 ? `1px solid ${COLORS.BORDER_SUBTLE}` : "none",
+                    }}
+                  >
+                    <VuiTypography variant="caption" color="text" fontFamily="'Roboto Mono', monospace">
+                      {alert.timestamp ? new Date(alert.timestamp).toLocaleTimeString("zh-CN", { hour: "2-digit", minute: "2-digit", second: "2-digit" }) : "--:--:--"}
+                    </VuiTypography>
+                    <VuiTypography variant="body2" color="white" ml={1} display="inline">
+                      {alert.message || alert.title || JSON.stringify(alert)}
+                    </VuiTypography>
+                  </VuiBox>
+                ))
+              )}
+            </Card>
+          </Grid>
+        </Grid>
       </VuiBox>
     </DashboardLayout>
   );

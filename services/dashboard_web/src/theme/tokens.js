@@ -1,33 +1,51 @@
 // ============================================================================
-// Design Tokens — Vision UI Glassmorphism Theme
+// Design Tokens — Precision Dark Trading Terminal
 // ============================================================================
 
-// ---------------------------------------------------------------------------
-// 1. COLORS — 业务语义颜色
-// ---------------------------------------------------------------------------
+// ---- Color System ----------------------------------------------------------
 export const COLORS = {
-  TRADING_UP: '#00FF94',      // 涨 / 盈利 / 健康
-  TRADING_DOWN: '#FF4D6D',    // 跌 / 亏损 / 异常
-  AI_SCORE: '#9D5FFF',        // AI 评分紫色
-  AI_STALE: '#FFAB00',        // 评分老化橙色
-  EMERGENCY: '#FF0033',       // 紧急亮红
-  CHART_LINE: '#0075FF',      // 图表线蓝
-  CHART_AREA_TOP: 'rgba(0,117,255,0.15)',
-  CHART_AREA_BOTTOM: 'rgba(0,117,255,0)',
+  // Primary accents
+  CYAN: '#00E5FF',           // Primary action / data highlight
+  CYAN_DIM: '#00B8D4',       // Hover / secondary
+  EMERALD: '#00E676',         // Bullish / profit / healthy — green shift
+  CRIMSON: '#FF1744',         // Bearish / loss / alert — pure red
+  AMBER: '#FFAB00',           // Warning / stale data
+  VIOLET: '#B388FF',          // AI / sentiment — softer than pure purple
+  GOLD: '#FFD740',            // Emphasis / pinned / active
+
+  // Chart
+  CHART_LINE: '#00E5FF',
+  CHART_AREA_TOP: 'rgba(0,229,255,0.18)',
+  CHART_AREA_BOTTOM: 'rgba(0,229,255,0)',
+
+  // Semantic
+  TRADING_UP: '#00E676',
+  TRADING_DOWN: '#FF1744',
+  AI_SCORE: '#B388FF',
+  AI_STALE: '#FFAB00',
+  EMERGENCY: '#FF1744',
+
+  // Background layers
+  BG_ROOT: '#070B14',
+  BG_SURFACE: '#0D1321',
+  BG_ELEVATED: '#141E30',
+  BG_OVERLAY: 'rgba(13,19,33,0.85)',
+
+  // Border
+  BORDER_SUBTLE: 'rgba(255,255,255,0.06)',
+  BORDER_ACTIVE: 'rgba(0,229,255,0.25)',
 };
 
-// ---------------------------------------------------------------------------
-// 2. GLOW — 毛玻璃发光效果
-// ---------------------------------------------------------------------------
+// ---- Glow Effects -----------------------------------------------------------
 export const GLOW = {
-  CARD: '0 0 15px rgba(0,117,255,0.1)',
-  BUTTON: '0 0 10px rgba(0,117,255,0.3)',
-  EMERGENCY_BTN: '0 0 20px rgba(255,0,51,0.4)',
+  CARD: '0 0 20px rgba(0,229,255,0.06)',
+  CARD_HOVER: '0 0 30px rgba(0,229,255,0.12)',
+  BUTTON: '0 0 12px rgba(0,229,255,0.25)',
+  EMERGENCY_BTN: '0 0 24px rgba(255,23,68,0.45)',
+  DATA_LIVE: '0 0 8px rgba(0,230,118,0.30)',
 };
 
-// ---------------------------------------------------------------------------
-// 3. TIMING — 动画 / 过渡时间 (ms)
-// ---------------------------------------------------------------------------
+// ---- Timing (ms) ------------------------------------------------------------
 export const TIMING = {
   PRICE_FLASH: 300,
   CARD_HOVER: 200,
@@ -35,18 +53,14 @@ export const TIMING = {
   WS_RECONNECT_MAX: 30000,
 };
 
-// ---------------------------------------------------------------------------
-// 4. SIZING — 布局常量 (px)
-// ---------------------------------------------------------------------------
+// ---- Layout Constants (px) ---------------------------------------------------
 export const SIZING = {
   SIDEBAR_WIDTH: 250,
   SIDEBAR_COLLAPSED: 80,
   TOPBAR_HEIGHT: 64,
 };
 
-// ---------------------------------------------------------------------------
-// 5. API — 连接默认值
-// ---------------------------------------------------------------------------
+// ---- API --------------------------------------------------------------------
 export const API = {
   BASE_URL: process.env.REACT_APP_API_URL || 'http://localhost:8080',
   WS_URL: process.env.REACT_APP_WS_URL || 'ws://localhost:8080/ws',

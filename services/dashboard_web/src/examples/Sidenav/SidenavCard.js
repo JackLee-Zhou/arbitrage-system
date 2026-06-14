@@ -1,93 +1,65 @@
-/*!
+// ============================================================================
+// SidenavCard — Trading system status indicator
+// ============================================================================
 
-=========================================================
-* Vision UI Free React - v1.0.0
-=========================================================
-
-* Product Page: https://www.creative-tim.com/product/vision-ui-free-react
-* Copyright 2021 Creative Tim (https://www.creative-tim.com/)
-* Licensed under MIT (https://github.com/creativetimofficial/vision-ui-free-react/blob/master LICENSE.md)
-
-* Design and Coded by Simmmple & Creative Tim
-
-=========================================================
-
-* The above copyright notice and this permission notice shall be included in all copies or substantial portions of the Software.
-
-*/
-
-// @mui material components
 import Card from "@mui/material/Card";
 import CardContent from "@mui/material/CardContent";
-import Icon from "@mui/material/Icon";
-import Link from "@mui/material/Link";
-
-// Vision UI Dashboard React components
-import VuiButton from "components/VuiButton";
 import VuiBox from "components/VuiBox";
 import VuiTypography from "components/VuiTypography";
-
-// Custom styles for the SidenavCard
-import { card, cardContent, cardIconBox, cardIcon } from "examples/Sidenav/styles/sidenavCard";
-
-// Vision UI Dashboard React context
 import { useVisionUIController } from "context";
+import useSystemStore from "stores/system";
 
-function SidenavCard({ color, ...rest }) {
+function SidenavCard({ ...rest }) {
   const [controller] = useVisionUIController();
-  const { miniSidenav, sidenavColor } = controller;
+  const { miniSidenav } = controller;
+  const { systemMode, wsStatus } = useSystemStore();
+
+  const modeLabel = systemMode === "normal" ? "正常" : systemMode === "safe" ? "安全模式" : systemMode === "paused" ? "已暂停" : systemMode;
+  const modeColor = systemMode === "normal" ? "#00E676" : systemMode === "safe" ? "#FFAB00" : "#FF1744";
 
   return (
-    <Card sx={(theme) => card(theme, { miniSidenav })}>
-      <CardContent sx={(theme) => cardContent(theme, { sidenavColor })}>
-        <VuiBox
-          bgColor="white"
-          width="2rem"
-          height="2rem"
-          borderRadius="md"
-          shadow="md"
-          mb={2}
-          sx={cardIconBox}
-        >
-          <Icon fontSize="medium" sx={(theme) => cardIcon(theme, { color })}>
-            star
-          </Icon>
-        </VuiBox>
-        <VuiBox lineHeight={1}>
-          <VuiTypography variant="h6" color="white">
-            Need help?
+    <Card
+      sx={{
+        background: "rgba(0,229,255,0.05)",
+        border: "1px solid rgba(0,229,255,0.10)",
+        borderRadius: "10px",
+        overflow: "hidden",
+      }}
+      {...rest}
+    >
+      <CardContent sx={{ p: 1.5, "&:last-child": { pb: 1.5 } }}>
+        {/* Status row */}
+        <VuiBox display="flex" alignItems="center" justifyContent="space-between" mb={1}>
+          <VuiTypography variant="caption" color="text" fontWeight="medium" textTransform="uppercase" letterSpacing="0.5px">
+            系统
           </VuiTypography>
-          <VuiBox mb={1.825} mt={-1}>
-            <VuiTypography variant="caption" color="white" fontWeight="regular">
-              Please check our docs
+          <VuiBox display="flex" alignItems="center" gap={0.5}>
+            <VuiBox sx={{ width: 5, height: 5, borderRadius: "50%", bgcolor: modeColor, boxShadow: `0 0 5px ${modeColor}` }} />
+            <VuiTypography variant="caption" color="white" fontWeight="medium" fontSize="11px">
+              {modeLabel}
             </VuiTypography>
           </VuiBox>
-          <VuiButton
-            component={Link}
-            href="https://www.creative-tim.com/learning-lab/react/quick-start/vision-ui-dashboard/"
-            target="_blank"
-            rel="noreferrer"
-            size="small"
-            // sx={{ color: "white !important", background: "red" }}
-            sx={({ palette: { gradients, white }, functions: { linearGradient } }) => ({
-              color: `${white.main} !important`,
-              background: linearGradient(
-                gradients.cardDark.main,
-                gradients.cardDark.state,
-                gradients.cardDark.deg
-              ),
-              "&:hover": {
-                background: linearGradient(
-                  gradients.cardDark.main,
-                  gradients.cardDark.state,
-                  gradients.cardDark.deg
-                ),
-              },
-            })}
-            fullWidth
-          >
-            DOCUMENTATION
-          </VuiButton>
+        </VuiBox>
+
+        {/* WS status */}
+        <VuiBox display="flex" alignItems="center" justifyContent="space-between">
+          <VuiTypography variant="caption" color="text" fontWeight="medium" textTransform="uppercase" letterSpacing="0.5px">
+            WS
+          </VuiTypography>
+          <VuiBox display="flex" alignItems="center" gap={0.5}>
+            <VuiBox
+              sx={{
+                width: 5,
+                height: 5,
+                borderRadius: "50%",
+                bgcolor: wsStatus === "connected" ? "#00E676" : wsStatus === "connecting" ? "#FFAB00" : "#FF1744",
+                boxShadow: `0 0 5px ${wsStatus === "connected" ? "#00E676" : wsStatus === "connecting" ? "#FFAB00" : "#FF1744"}`,
+              }}
+            />
+            <VuiTypography variant="caption" color="white" fontWeight="medium" fontSize="11px">
+              {wsStatus === "connected" ? "已连接" : wsStatus === "connecting" ? "连接中" : "离线"}
+            </VuiTypography>
+          </VuiBox>
         </VuiBox>
       </CardContent>
     </Card>
