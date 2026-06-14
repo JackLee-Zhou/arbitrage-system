@@ -24,6 +24,9 @@ go-engine/dist/
 dashboard/bin/
 watchdog/bin/
 
+# 各服务根目录下意外编译出的裸二进制
+services/*/main
+
 # Go workspace
 go.work
 go.work.sum
