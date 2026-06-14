@@ -1,0 +1,30 @@
+// contracts/instrument.proto
+// 合约元数据契约 — ctp_tick 启动时写入 Redis + InfluxDB
+syntax = "proto3";
+
+package arbitrage.v1;
+
+option go_package = "github.com/arbitrage-system/contracts/generated/go/instrument";
+
+// InstrumentMetadata 单个期货合约的完整元数据
+// 对应 CTP CThostFtdcInstrumentField 的 Go 侧映射
+// ctp_tick 启动时从 TD API 查询所有合约后，提取为消息写入 Redis/InfluxDB
+message InstrumentMetadata {
+  string symbol          = 1;   // "MA2509" — 合约代码
+  string product_id      = 2;   // "MA" — 品种 ID
+  string exchange        = 3;   // "CZCE" — 交易所代码
+  string product_name_cn = 4;   // "甲醇" — 中文品种名（通过内置映射表推导）
+  string product_class   = 5;   // "1" — 产品类型：1=期货, 2=期权, 3=组合
+
+  int32  contract_year   = 6;   // 2025 — 合约年份
+  int32  contract_month  = 7;   // 9 — 合约月份
+
+  double multiplier      = 8;   // 10 — 合约乘数（每手吨数）
+  double price_tick      = 9;   // 1.0 — 最小变动价位
+  double long_margin_ratio  = 10; // 0.08 — 多头保证金率
+  double short_margin_ratio = 11; // 0.08 — 空头保证金率
+
+  string expire_date    = 12;   // "2026-01-15" — 到期日
+  string open_date      = 13;   // "2025-01-15" — 上市日
+  bool   is_trading     = 14;   // true — 是否可交易
+}

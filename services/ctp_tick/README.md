@@ -86,6 +86,7 @@ ctp_tick/
 |---|---|---|---|
 | HTTP | 8081 | `/healthz` | 健康检查（含 CTP 连接状态） |
 | HTTP | 8081 | `/metrics` | Prometheus 指标 |
+| HTTP | 8081 | `/internal/snapshot` | 全市场最新价快照 JSON（orchestrator fallback 查询） |
 
 ### 写入的 Redis
 
@@ -93,12 +94,19 @@ ctp_tick/
 |---|---|---|---|
 | 持久化流 | `write:tick` (Stream) | 批量 100 条/1 秒 | **全市场**合约 Tick → db_writer 落库 |
 | 业务流 | `tick:<symbol>` (Stream) | 逐笔近实时 | **仅关注合约** → trading_agent 分析 |
+| 合约元数据全量 | `instruments:all` (KV) | 启动时 | JSON 数组，含 ~330 合约的完整元数据（symbol/exchange/price_tick/multiplier 等） |
+| 合约元数据单条 | `instrument:<symbol>` (KV) | 启动时 | 单个合约的元数据 JSON，如 `instrument:MA2509` |
+| 最新价快照 | `last_price:<symbol>` (KV, JSON) | 批量 1 秒 | **全市场**合约最新价快照（TTL 60s，断线自动过期） |
 | 服务注册 | `services:ctp_tick` (KV) | 10 秒续约 | ServiceInfo 30s TTL |
 
-### 数据流（v0.2.0）
+### 数据流（v0.3.0）
 
 ```
 启动时：TD API → 查询 6 交易所 → filter ProductClass='1' → ~330 期货合约
+            ├→ DeriveAllInstrumentInfos → MetadataWriter.WriteAll
+            │    ├→ Redis: SET instruments:all (JSON list)
+            │    ├→ Redis: SET instrument:<symbol> (each)
+            │    └→ InfluxDB: POST instruments bucket (Line Protocol)
             └→ MD API.SubscribeMarketData(allSymbols)
 
 每 Tick：CTP 回调线程（绝对不能阻塞）

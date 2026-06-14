@@ -81,14 +81,14 @@ type ServiceInfo struct {
 // Registry 管理与 Redis 之间的服务注册和心跳续约。
 // 通过 Register 创建，通过 Shutdown 销毁。
 type Registry struct {
-	client    pkgredis.RedisClient
-	info      ServiceInfo
-	ttlSec    int64
-	interval  time.Duration
-	stopCh    chan struct{}
-	doneCh    chan struct{}
-	mu        sync.Mutex
-	shutdown  bool
+	client   pkgredis.RedisClient
+	info     ServiceInfo
+	ttlSec   int64
+	interval time.Duration
+	stopCh   chan struct{}
+	doneCh   chan struct{}
+	mu       sync.Mutex
+	shutdown bool
 
 	// renewFailures 连续心跳续约失败次数
 	renewFailures atomic.Int64

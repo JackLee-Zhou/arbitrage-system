@@ -25,6 +25,10 @@ services:watchdog  →  {"name":"watchdog","version":"1.0.0","capabilities":["he
 
 ## 使用方式
 
+### 简易方式（推荐）
+
+`RegisterAndKeepAlive` 返回一个 cancel 函数，适合大多数场景：
+
 ```go
 import (
     "context"
@@ -38,7 +42,7 @@ func main() {
     ctx := context.Background()
     client := pkgredis.NewAdapter("redis:6379")
 
-    reg, err := registry.Register(ctx, client, registry.ServiceInfo{
+    cancel, err := registry.RegisterAndKeepAlive(ctx, client, registry.ServiceInfo{
         Name:      "my_service",
         Version:   "1.0.0",
         HealthURL: ":8081",
@@ -47,22 +51,37 @@ func main() {
     if err != nil {
         log.Fatalf("注册失败: %v", err)
     }
-    defer reg.Shutdown(ctx)
+    defer cancel()
 
     // ... 业务逻辑 ...
 }
 ```
 
-### 自定义选项
+### 标准方式（支持自定义选项）
+
+```go
+reg, err := registry.Register(ctx, client, registry.ServiceInfo{
+    Name:      "my_service",
+    Version:   "1.0.0",
+    HealthURL: ":8081",
+    Capabilities: []string{"tick", "focus_push"},
+})
+if err != nil {
+    log.Fatalf("注册失败: %v", err)
+}
+defer reg.Shutdown(ctx)
+```
+
+#### 自定义选项
 
 ```go
 reg, err := registry.Register(ctx, client, info,
-    registry.WithTTL(60),           // TTL 60 秒（默认 30）
-    registry.WithInterval(15*time.Second), // 续约间隔 15 秒（默认 10s）
+    registry.WithTTL(60),                     // TTL 60 秒（默认 30）
+    registry.WithInterval(15*time.Second),    // 续约间隔 15 秒（默认 10s）
 )
 ```
 
-### 超时控制
+#### 超时控制
 
 ```go
 // 5 秒超时
@@ -71,6 +90,15 @@ defer cancel()
 if err := reg.Shutdown(ctx); err != nil {
     log.Printf("注销超时: %v", err)
 }
+```
+
+### 从 Registry 转为 cancel
+
+```go
+reg, err := registry.Register(ctx, client, info)
+// ...
+cancel := registry.KeepAlive(reg)
+defer cancel()
 ```
 
 ## ServiceInfo 字段说明

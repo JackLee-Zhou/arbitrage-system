@@ -8,7 +8,13 @@ import (
 	"os/signal"
 	"syscall"
 	"time"
+
+	pkgredis "github.com/arbitrage-system/pkg/redis"
+	pkgregistry "github.com/arbitrage-system/pkg/registry"
 )
+
+// serviceVersion 当前服务版本
+const serviceVersion = "0.1.0"
 
 func main() {
 	log.SetFlags(log.LstdFlags | log.Lshortfile)
@@ -16,8 +22,28 @@ func main() {
 
 	cfg := loadConfig()
 
-	// 连接 Redis（带重试）
-	redisClient := connectRedis(cfg.RedisAddr, 60*time.Second)
+	// 连接 Redis（使用 pkg/redis 统一入口）
+	redisClient := pkgredis.NewAdapter(cfg.RedisAddr)
+
+	// ---- 服务注册 ----
+	registryCancel, err := pkgregistry.RegisterAndKeepAlive(
+		context.Background(), redisClient, pkgregistry.ServiceInfo{
+			Name:         "trading_agent",
+			Version:      serviceVersion,
+			StartedAt:    time.Now(),
+			HealthURL:    ":" + cfg.HealthPort,
+			GRPCAddr:     ":" + cfg.GRPCPort,
+			Capabilities: []string{"decision", "indicator", "risk"},
+		},
+	)
+	if err != nil {
+		log.Printf("[trading_agent] warning: service registration failed: %v (continuing)", err)
+	}
+	defer func() {
+		if registryCancel != nil {
+			registryCancel()
+		}
+	}()
 
 	// 连接 InfluxDB（带重试）
 	influxClient := connectInfluxDB(cfg.InfluxDBURL, 60*time.Second)
@@ -77,11 +103,6 @@ type EngineState struct {
 	Mode       string // "normal" / "safe_mode"
 	Positions  interface{}
 	Strategies interface{}
-}
-
-func connectRedis(addr string, timeout time.Duration) interface{} {
-	log.Printf("[trading_agent] connecting to Redis at %s...", addr)
-	return nil
 }
 
 func connectInfluxDB(url string, timeout time.Duration) interface{} {

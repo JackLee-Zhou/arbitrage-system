@@ -89,7 +89,7 @@
 
 **拆解**：
 
-- [ ] **OPT-002-a** 新建 `pkg/registry/heartbeat.go`
+- [x] **OPT-002-a** 新建 `pkg/registry/heartbeat.go`
   - 定义 `type ServiceInfo struct { Name, Version string; StartedAt int64; HealthURL, GRPCAddr string; Capabilities []string }`
   - 暴露 `func RegisterAndKeepAlive(ctx context.Context, client pkgredis.RedisClient, info ServiceInfo) (cancel func(), err error)`
   - 内部逻辑：
@@ -102,13 +102,13 @@
     - 注册成功
     - 续约调用次数 ≈ runtime / 10s
     - cancel() 后 DEL 被调用
-- [ ] **OPT-002-c** 在 `pkg/registry/` 写 `README.md`，含 ServiceInfo 字段定义 + 示例
-- [ ] **OPT-002-d** 9 个服务的 `cmd/main.go` 都接入（按以下顺序，每改一个跑测试）：
-  - ctp_tick
-  - trading_agent
-  - orchestrator
-  - db_writer
-  - watchdog
+- [x] **OPT-002-c** 在 `pkg/registry/` 写 `README.md`，含 ServiceInfo 字段定义 + 示例
+- [x] **OPT-002-d** 9 个服务的 `cmd/main.go` 都接入（按以下顺序，每改一个跑测试）：
+  - [x] ctp_tick（已有）
+  - [x] trading_agent（新增）
+  - [x] orchestrator（新增）
+  - [x] db_writer（已有）
+  - [x] watchdog（新增）
   - intel_collector（Python，不接入 pkg；走 Python 自己的等价实现）
   - llm_scorer（Python，同上）
   - dashboard_web（无主进程，跳过）
@@ -266,15 +266,15 @@
 
 **拆解**：
 
-- [ ] **OPT-201-a** ctp_tick 启动流程：TD API 查询完成后，把完整合约列表写入 Redis
-  - KEY: `instruments:all` （Hash 或 JSON List）
+- [x] **OPT-201-a** ctp_tick 启动流程：TD API 查询完成后，把完整合约列表写入 Redis
+  - KEY: `instruments:all` （JSON List）
   - KEY: `instrument:<symbol>` 单个合约元数据
   - 不设 TTL（每次启动覆盖刷新）
-- [ ] **OPT-201-b** 同时写一份到 InfluxDB `instruments` bucket（含日期标签）
+- [x] **OPT-201-b** 同时写一份到 InfluxDB `instruments` bucket（含日期标签）
   - 每月主力切换时记录变化
   - retention 永久
-- [ ] **OPT-201-c** 在 `services/ctp_tick/README.md` 的「写入的 Redis」表中登记新增 Key
-- [ ] **OPT-201-d** 新增 `contracts/instrument.proto` 定义 `InstrumentMetadata` 消息（如 contracts 中已有则跳过）
+- [x] **OPT-201-c** 在 `services/ctp_tick/README.md` 的「写入的 Redis」表中登记新增 Key
+- [x] **OPT-201-d** 新增 `contracts/instrument.proto` 定义 `InstrumentMetadata` 消息（如 contracts 中已有则跳过）
 
 **Acceptance Criteria**：
 - ctp_tick 启动后 30 秒内 `redis-cli HLEN instruments:all` 返回 ≥ 200
@@ -294,14 +294,14 @@
 
 **拆解**：
 
-- [ ] **OPT-202-a** ctp_tick 内部新增 `LastPriceSnapshot` 内存映射 `map[symbol]*PriceSnapshot`
+- [x] **OPT-202-a** ctp_tick 内部新增 `LastPriceSnapshot` 内存映射 `map[symbol]*PriceSnapshot`
   - 每个 Tick 触发更新（覆盖式）
   - 包含字段：symbol / last_price / open / high / low / pre_close / change_pct / volume / open_interest / updated_at
-- [ ] **OPT-202-b** 后台 goroutine 每 1 秒 pipeline 批量写 Redis（节流）
+- [x] **OPT-202-b** 后台 goroutine 每 1 秒 pipeline 批量写 Redis（节流）
   - KEY: `last_price:<symbol>`（Hash）
   - TTL: 60 秒（断线后自动过期）
-- [ ] **OPT-202-c** 提供 `GET /internal/snapshot` HTTP 端点供 orchestrator 全量查询（fallback）
-- [ ] **OPT-202-d** 在 `services/ctp_tick/README.md` 的「写入的 Redis」表中登记 `last_price:<symbol>`
+- [x] **OPT-202-c** 提供 `GET /internal/snapshot` HTTP 端点供 orchestrator 全量查询（fallback）
+- [x] **OPT-202-d** 在 `services/ctp_tick/README.md` 的「写入的 Redis」表中登记 `last_price:<symbol>`
 
 **Acceptance Criteria**：
 - 接收 1 个 Tick 后，`redis-cli HGETALL last_price:MA2509` 返回最新价信息
@@ -695,6 +695,9 @@
 | 2026-06-14 | -- | claude-code | 新增第三章「Dashboard 后端配套」：OPT-201 (合约元数据) / OPT-202 (全市场最新价快照) / OPT-203 (主力合约计算)，章节顺序整理 | -- |
 | 2026-06-14 | OPT-001-a~d | claude-code | 完成 Redis 重试逻辑抽取：新增 pkg/redis/retry.go + retry_test.go（11 测试全部通过），Mock 加失败注入，ctp_tick 改用 XAddWithRetry | -- |
 | 2026-06-14 | -- | claude-code | 新增 OPT-005 (Python 服务注册)；新增第四章「Dashboard 前端任务」12 个 OPT (OPT-300 ~ OPT-311)；新增第五章「跨模块新功能」4 个 OPT (OPT-204 ~ OPT-207)；总 OPT 数 9 → 25 | -- |
+| 2026-06-14 | OPT-201-a~d | claude-code | 完成 ctp_tick 合约元数据写入：新增 contracts/instrument.proto、domain/ 推导映射表（含 6 交易所 60+ 品种的中文名/乘数/最小变动/保证金率）、metadata 适配器（Redis instruments:all+instrument:<symbol> + InfluxDB Line Protocol HTTP），main.go 装配 + 11 个 unit 测试 + README 登记 | -- |
+| 2026-06-14 | OPT-002-a~d | claude-code (team) | 完成服务注册逻辑抽取：新增 pkg/registry/heartbeat.go（RegisterAndKeepAlive）+ heartbeat_test.go（6 测试），3 个 Go 服务（trading_agent/orchestrator/watchdog）接入服务注册，pkg/registry 现有 23 测试全部通过 | -- |
+| 2026-06-14 | OPT-202-a~d | claude-code (team) | 完成 ctp_tick 全市场最新价快照：新增 domain/PriceSnapshot+LastPriceStore、adapters/redis/SnapshotWriter（1s 批量写入 TTL 60s）、api/snapshot.go（GET /internal/snapshot 端点），main.go 装配 + 7 个 unit 测试 + README 登记 | -- |
 
 ---
 

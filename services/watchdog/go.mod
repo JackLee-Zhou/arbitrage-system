@@ -2,7 +2,10 @@ module github.com/arbitrage-system/watchdog
 
 go 1.26.4
 
-require github.com/arbitrage-system/pkg/redis v0.0.0
+require (
+	github.com/arbitrage-system/pkg/redis v0.0.0
+	github.com/arbitrage-system/pkg/registry v0.0.0
+)
 
 require (
 	github.com/cespare/xxhash/v2 v2.3.0 // indirect
@@ -10,4 +13,7 @@ require (
 	go.uber.org/atomic v1.11.0 // indirect
 )
 
-replace github.com/arbitrage-system/pkg/redis => ../../pkg/redis
+replace (
+	github.com/arbitrage-system/pkg/redis => ../../pkg/redis
+	github.com/arbitrage-system/pkg/registry => ../../pkg/registry
+)

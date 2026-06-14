@@ -17,6 +17,7 @@ import (
 	pkgregistry "github.com/arbitrage-system/pkg/registry"
 
 	"github.com/arbitrage-system/ctp_tick/internal/adapters/ctp"
+	"github.com/arbitrage-system/ctp_tick/internal/adapters/metadata"
 	"github.com/arbitrage-system/ctp_tick/internal/adapters/redis"
 	"github.com/arbitrage-system/ctp_tick/internal/api"
 	"github.com/arbitrage-system/ctp_tick/internal/domain"
@@ -35,6 +36,13 @@ func main() {
 
 	// 异步行情写入器（内部启动 writerLoop goroutine）
 	tickWriter := redis.NewTickWriter(redisClient, cfg.SubscribeSymbols)
+
+	// 全市场最新价快照存储（线程安全内存 map）
+	lastPriceStore := domain.NewLastPriceStore()
+
+	// 全市场快照 Redis 写入器（后台 1s 批量写入）
+	snapshotWriter := redis.NewSnapshotWriter(lastPriceStore, redisClient)
+	defer snapshotWriter.Close()
 
 	// 合约查询器（TD API — Mock 或 cgo 真实现）
 	contractQuerier := ctp.NewContractQuerier()
@@ -89,6 +97,7 @@ func main() {
 	mux := http.NewServeMux()
 	mux.Handle("/healthz", healthChecker)
 	mux.Handle("/metrics", metrics)
+	mux.Handle("/internal/snapshot", api.NewSnapshotHandler(lastPriceStore))
 
 	httpServer := &http.Server{
 		Addr:         ":" + cfg.HealthPort,
@@ -114,6 +123,13 @@ func main() {
 	}
 	log.Printf("[ctp_tick] total %d futures to subscribe, focus=%v", len(allSymbols), cfg.SubscribeSymbols)
 
+	// ---- Step 1.5: 写合约元数据到 Redis + InfluxDB ----
+	metaWriter := metadata.NewWriter(redisClient, cfg.InfluxURL, cfg.InfluxToken, cfg.InfluxOrg)
+	instruments := domain.DeriveAllInstrumentInfos(allSymbols)
+	if err := metaWriter.WriteAll(context.Background(), instruments); err != nil {
+		log.Printf("[ctp_tick] write instrument metadata failed (non-fatal): %v", err)
+	}
+
 	// ---- Step 2: 注册行情回调（绝对不能阻塞 CTP 回调线程）----
 	mdAPI.OnTick(func(raw *ctp.DepthMarketData) {
 		metrics.TickReceived.Add(1)
@@ -124,6 +140,9 @@ func main() {
 			metrics.TickDropped.Add(1)
 			return
 		}
+
+		// 更新内存快照（覆盖式）
+		lastPriceStore.Update(tick)
 
 		// 非阻塞发送到 writer goroutine —— 绝对不能阻塞
 		if tickWriter.Send(tick.Symbol, tick) {
@@ -230,6 +249,9 @@ type Config struct {
 	CTPPassword      string
 	FlowPath         string
 	SubscribeSymbols []string // 关注合约（走 tick:<symbol> + write:tick）；其他仅 write:tick
+	InfluxURL        string   // InfluxDB HTTP API v2 地址（空=不写 InfluxDB）
+	InfluxToken      string   // InfluxDB 认证 token
+	InfluxOrg        string   // InfluxDB 组织名
 }
 
 func loadConfig() Config {
@@ -244,6 +266,9 @@ func loadConfig() Config {
 		CTPPassword:      getEnv("CTP_PASSWORD", ""),
 		FlowPath:         getEnv("CTP_FLOW_PATH", "./flow_md"),
 		SubscribeSymbols: parseSymbols(getEnv("SUBSCRIBE_SYMBOLS", "MA2509")),
+		InfluxURL:        getEnv("INFLUXDB_URL", ""), // 空=不写 InfluxDB
+		InfluxToken:      getEnv("INFLUXDB_TOKEN", ""),
+		InfluxOrg:        getEnv("INFLUXDB_ORG", "arbitrage"),
 	}
 }
 

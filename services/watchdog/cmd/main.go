@@ -9,6 +9,7 @@ import (
 	"fmt"
 	"log"
 	"os"
+	"os/signal"
 	"runtime"
 	"strings"
 	"sync"
@@ -16,10 +17,14 @@ import (
 	"time"
 
 	pkgredis "github.com/arbitrage-system/pkg/redis"
+	pkgregistry "github.com/arbitrage-system/pkg/registry"
 
 	"github.com/arbitrage-system/watchdog/internal/adapters"
 	"github.com/arbitrage-system/watchdog/internal/domain"
 )
+
+// serviceVersion 当前服务版本
+const serviceVersion = "0.1.0"
 
 func main() {
 	log.SetFlags(log.LstdFlags | log.Lshortfile)
@@ -27,12 +32,37 @@ func main() {
 
 	cfg := loadConfig()
 
+	// ---- 服务注册 ----
+	redisClient := pkgredis.NewAdapter(cfg.RedisAddr)
+	registryCancel, err := pkgregistry.RegisterAndKeepAlive(
+		context.Background(), redisClient, pkgregistry.ServiceInfo{
+			Name:         "watchdog",
+			Version:      serviceVersion,
+			StartedAt:    time.Now(),
+			HealthURL:    ":8081",
+			Capabilities: []string{"health_check", "disk_monitor", "memory_monitor"},
+		},
+	)
+	if err != nil {
+		log.Printf("[watchdog] warning: service registration failed: %v (continuing)", err)
+	}
+	defer func() {
+		if registryCancel != nil {
+			registryCancel()
+		}
+	}()
+
 	go healthCheckLoop(cfg)
 	go diskMonitorLoop(cfg)
 	go memoryMonitorLoop(cfg)
 
 	log.Println("[watchdog] all monitors started")
-	select {}
+
+	// ---- 等待退出信号 ----
+	sigCh := make(chan os.Signal, 1)
+	signal.Notify(sigCh, syscall.SIGINT, syscall.SIGTERM)
+	sig := <-sigCh
+	log.Printf("[watchdog] received signal %v, shutting down...", sig)
 }
 
 type Config struct {
