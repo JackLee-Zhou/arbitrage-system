@@ -212,6 +212,12 @@ type GlobalState struct {
 | GET | `/audit?from=...` | 审计日志 |
 | GET | `/audit/decisions/{id}` | 决策溯源（机制 6 反查） |
 | GET | `/sentiment` | 舆情指数（P3） |
+| **GET** | **`/contracts`** | ⭐ 全市场合约列表（v1.2 新增，依赖 OPT-201）|
+| **GET** | **`/contracts/{symbol}`** | ⭐ 单合约元数据（v1.2 新增）|
+| **GET** | **`/contracts/{symbol}/snapshot`** | ⭐ 单合约实时快照（依赖 OPT-202）|
+| **GET** | **`/contracts/{symbol}/intraday`** | ⭐ 当日分时图数据 |
+| **GET** | **`/contracts/{symbol}/kline?period=1d&from=...`** | ⭐ K 线数据 |
+| **GET** | **`/contracts?type=main`** | ⭐ 主力合约列表（依赖 OPT-203）|
 
 #### 修改类（**走交易时段守卫**）
 
@@ -363,6 +369,7 @@ go test -tags=integration ./tests/integration/...
 
 ## AI Agent 准则
 
+### 通用准则
 - ✅ 加新 REST endpoint → 同步更新 dashboard_web 的 API 客户端
 - ✅ 改 gRPC 调用 → 同时更新 `contracts/orchestrator.proto`
 - ✅ 加 WebSocket channel → 文档化推送时机
@@ -371,6 +378,37 @@ go test -tags=integration ./tests/integration/...
 - ❌ 不要在 orchestrator 里持久化业务状态
 - ❌ 不要绕过 TradingSessionGuard 中间件
 
+### ⭐ 接口需求处理（重要！）
+
+**接到 orchestrator 任务时，第一件事就是读 [`API_REQUESTS.md`](./API_REQUESTS.md)**。
+
+```
+1. 读 API_REQUESTS.md 找出所有 [ ] 待实现的 REQ-XXX
+   ↓
+2. 在「任务报告与计划」第 4 项里列出本次要实现哪些 REQ-XXX
+   ↓
+3. 等用户确认（用户可能选择本轮全做 / 部分做 / 推迟）
+   ↓
+4. 认领时把 REQ-XXX 状态从 [ ] 改为 [~]，加 agent 名 + 时间
+   ↓
+5. 实现：
+   ├─ 写代码 + unit 测试
+   ├─ 同步更新本服务 README 的 REST API 表
+   └─ 用 curl 验证响应符合 REQ 中的格式约定
+   ↓
+6. 实现完成后：
+   ├─ 状态改为 [x]
+   ├─ 在 REQ-XXX 末尾追加「实现摘要」
+   └─ 在「完成报告」中明确通知 dashboard agent：
+      "REQ-001 / REQ-005 已实现，请在下次 dashboard 任务中接入"
+```
+
+**重要原则**：
+- 任何新增 / 修改 REST endpoint 都必须**先在 README REST API 表登记** + **更新本文档**
+- API_REQUESTS.md 是 orchestrator 的"任务前**必读**文档"
+
+详细规则见 [`API_REQUESTS.md`](./API_REQUESTS.md)。
+
 ---
 
 ## 文档变更记录
@@ -378,3 +416,5 @@ go test -tags=integration ./tests/integration/...
 | 版本 | 日期 | 变更 |
 |---|---|---|
 | v1.0 | 2026-06-13 | 初版（v2.2 拆出 dashboard 后） |
+| v1.1 | 2026-06-14 | 新增 6 个合约浏览相关 REST endpoint（GET /contracts/* 系列），依赖 OPT-201 / OPT-202 / OPT-203 完成；详见 OPTIMIZATIONS.md 第三章 |
+| v1.2 | 2026-06-14 | 引入 [`API_REQUESTS.md`](./API_REQUESTS.md) 跨服务接口请求登记簿；AI Agent 准则加「接口需求处理」流程：接任务前**必读** API_REQUESTS.md，按 REQ-XXX 三状态闭环（[ ] → [~] → [x] → [✓]）实现 |

@@ -8,15 +8,18 @@
 ## 0. 阅读顺序（任何人/agent 第一次接手必读）
 
 ```
-1. ENGINEERING_GUIDE.md（本文档）        — 工程规则
-2. docs/QUESTION_DEAL.md                 — ⚠️ 全局问题汇总（先看有没有已知坑）
-3. docs/ARCHITECTURE.md                  — 架构方案（v2.3，约 2600 行）
-4. contracts/README.md                   — 跨服务契约管理
-5. services/<你要改的模块>/README.md      — 该模块详细文档
-6. services/<你要改的模块>/QUESTION.md   — 该模块已知问题和修复记录
+1. AGENTS.md                             — ⭐ AI Agent 强制工作流 SOP（第一份读）
+2. ENGINEERING_GUIDE.md（本文档）        — 工程规则（被动查阅细则）
+3. docs/QUESTION_DEAL.md                 — ⚠️ 全局问题汇总（先看有没有已知坑）
+4. OPTIMIZATIONS.md                      — ⚠️ 全局优化清单（认领任务前先看有没有现成 OPT-XXX）
+5. docs/ARCHITECTURE.md                  — 架构方案（v2.3，约 2600 行）
+6. contracts/README.md                   — 跨服务契约管理
+7. services/<你要改的模块>/README.md      — 该模块详细文档
+8. services/<你要改的模块>/QUESTION.md   — 该模块已知问题和修复记录
 ```
 
-读完上述 6 个文档**之后**再开始写代码。
+⚠️ **AI Agent 必须先读 AGENTS.md**（含强制任务报告 + 计划流程），不读完不开工。
+人类开发者读完上述 8 个文档**之后**再开始写代码。
 
 ---
 
@@ -700,3 +703,5 @@ make install-hooks
 | v1.1 | 2026-06-13 | 新增 CI/CD 工作流章节（三层检测体系 + pre-commit hook + GitHub Actions） |
 | v1.2 | 2026-06-13 | 五条→七条硬规则；新增规则 6「禁止魔法数字」、规则 7「Go 服务 Redis 统一初始化」；更新目录约束允许 pkg/ 作为 Go 共享包 |
 | v1.3 | 2026-06-13 | 新增「分支工作流规则」—— 新模块必须先切分支、make check 通过后才能合并 |
+| v1.4 | 2026-06-13 | 新增准则 9「Rule of Three（不要过早抽取）」+ 准则 10「发现优化机会写到 OPTIMIZATIONS.md」；明确"可以抽的"与"不要抽的"清单 |
+| v1.5 | 2026-06-14 | 阅读顺序改为 8 份文档：AGENTS.md 提到第 1 位（强制工作流 SOP），加上 OPTIMIZATIONS.md 第 4 位 |

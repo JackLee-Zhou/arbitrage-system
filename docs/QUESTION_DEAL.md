@@ -17,7 +17,7 @@
 | watchdog | [QUESTION.md](../services/watchdog/QUESTION.md) | 6 | 4 | 开发中 |
 | llm_scorer | [QUESTION.md](../services/llm_scorer/QUESTION.md) | 0 | 0 | 待开发 |
 | intel_collector | [QUESTION.md](../services/intel_collector/QUESTION.md) | 0 | 0 | 待开发 |
-| dashboard_web | [QUESTION.md](../services/dashboard_web/QUESTION.md) | 0 | 0 | 待开发 |
+| dashboard_web | [QUESTION.md](../services/dashboard_web/QUESTION.md) | 1 | 0 | 设计阶段 |
 | stock_tick | [QUESTION.md](../services/stock_tick/QUESTION.md) | 0 | 0 | V2 占位 |
 
 ---
@@ -98,3 +98,4 @@
 |---|---|---|
 | v1.0 | 2026-06-13 | 初版，汇总 ctp_tick 开发过程 7 个已修复 + 2 个待解决 + 3 个通用问题 |
 | v1.1 | 2026-06-14 | db_writer 首轮开发：10 修复 + 7 待解决；db_writer 状态更新为"开发中"；pkg/registry + pkg/redis 扩展交付 |
+| v1.2 | 2026-06-14 | dashboard_web 设计阶段：登记「紧急平仓仅在持仓页」的设计风险（accepted） |
