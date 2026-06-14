@@ -34,9 +34,11 @@
 ### 2. 我读过的文档
 - [ ] AGENTS.md（本文档）
 - [ ] ENGINEERING_GUIDE.md 的相关章节：____
+- [ ] docs/QUESTION_DEAL.md 的全局汇总 + 按日期汇总：____
 - [ ] OPTIMIZATIONS.md 是否有相关 OPT-XXX：____
 - [ ] docs/ARCHITECTURE.md 的相关章节：____
 - [ ] 涉及服务的 services/<name>/README.md：____
+- [ ] 涉及服务的 services/<name>/QUESTION.md：____
 - [ ] contracts/ 是否需要改：____
 - [ ] services/orchestrator/API_REQUESTS.md（dashboard / orchestrator 任务必读）：____
 
@@ -97,15 +99,19 @@
 ## 第 1 章：阅读顺序（任务认领前必读）
 
 ```
-1. AGENTS.md（本文档）              ⭐ 工作流 SOP
-2. ENGINEERING_GUIDE.md             — 规则细则
-3. OPTIMIZATIONS.md                 — 看有没有现成 OPT-XXX 任务
-4. docs/ARCHITECTURE.md             — 架构（按需查相关章节）
-5. contracts/README.md              — 契约规则（如改契约）
-6. services/<你要改的模块>/README.md  — 该服务详情
+1. AGENTS.md（本文档）                  ⭐ 工作流 SOP
+2. ENGINEERING_GUIDE.md                 — 规则细则
+3. docs/QUESTION_DEAL.md                — ⚠️ 全局问题汇总（先看有没有已知坑）
+4. OPTIMIZATIONS.md                     — 看有没有现成 OPT-XXX 任务
+5. docs/ARCHITECTURE.md                 — 架构（按需查相关章节）
+6. contracts/README.md                  — 契约规则（如改契约）
+7. services/<你要改的模块>/README.md      — 该服务详情
+8. services/<你要改的模块>/QUESTION.md   — ⚠️ 该模块已知问题和修复记录
 ```
 
 ⚠️ **不要"全文背诵"** — 用 grep / 跳读关键章节即可。
+
+⚠️ **第 3、8 项（QUESTION.md）不可跳过**——避免踩已知坑或重复修已修复的问题。
 
 ---
 
@@ -776,7 +782,7 @@ C. 你有更好建议
 
 ```
 [ ] 我有没有跳过第 0 章的任务报告与计划？
-[ ] 我读过涉及服务的 README 吗？
+[ ] 我读过涉及服务的 README 和 QUESTION.md 吗？（避免踩已知坑）
 [ ] 我有没有触碰 7 条硬规则中的任何一条？
     （如有 → 在完成报告说明 + 提供异议）
 [ ] 我有没有触碰 10 条 AI 准则中的任何一条？
@@ -803,10 +809,13 @@ C. 你有更好建议
 ─────────────────────────────────────────────────
 刚接到任务                    → AGENTS.md（本文档）
 准备写计划，需要规则细节       → ENGINEERING_GUIDE.md
+了解已知问题 / 避免踩坑       → docs/QUESTION_DEAL.md + services/<name>/QUESTION.md
 找现成任务认领                → OPTIMIZATIONS.md
 理解架构决策（如为什么 9 服务）→ docs/ARCHITECTURE.md
 改某个服务的具体代码           → services/<name>/README.md
 改契约                       → contracts/README.md
+发现 dashboard 缺接口          → services/orchestrator/API_REQUESTS.md
+orchestrator 接任务前          → services/orchestrator/API_REQUESTS.md（先看有没有待实现 REQ）
 紧急情况                      → ENGINEERING_GUIDE.md 第 14 章「紧急情况处理」
 ```
 
@@ -827,3 +836,4 @@ C. 你有更好建议
 | v1.0 | 2026-06-14 | 初版，定义 11 章强制工作流 SOP |
 | v1.1 | 2026-06-14 | 新增第 4 章「代码评审与问题闭环」(强制 5 步：/code-review → 登记 QUESTION → 修复 → 二次评审 → 报告)；DoD 加 3 个评审出口；任务 SOP 8.1-8.4 全部加 review 闭环步骤；第 9 章禁止行为加 5 条评审相关；自我提问检查加 4 条评审问题；总章节 11 → 12 |
 | v1.2 | 2026-06-14 | 新增 3 个跨服务协作 SOP：8.5「dashboard 发现缺接口」/ 8.6「orchestrator 实现接口」/ 8.7「dashboard 接入已实现接口」；引入 [`services/orchestrator/API_REQUESTS.md`](./services/orchestrator/API_REQUESTS.md) 作为接口需求登记簿（三状态闭环 [ ] → [~] → [x] → [✓]）；原 8.5「写文档」顺延为 8.8；总任务类型 SOP 由 5 个增至 8 个 |
+| v1.3 | 2026-06-14 | 与 ENGINEERING_GUIDE.md v1.5 对齐阅读顺序（8 份文档）；Ch1 补 QUESTION_DEAL.md + 服务 QUESTION.md；Ch0.1 任务报告模板「我读过的文档」加 QUESTION 检查；Ch11 导航表加 QUESTION / API_REQUESTS 入口；Ch10 自我提问加 QUESTION.md 检查项 |
