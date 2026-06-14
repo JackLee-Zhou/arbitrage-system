@@ -10,11 +10,11 @@
 
 | 服务 | QUESTION.md | 待解决 | 已修复 | 状态 |
 |---|---|---|---|---|
-| ctp_tick | [QUESTION.md](../services/ctp_tick/QUESTION.md) | 2 | 22 | 开发中 |
-| trading_agent | [QUESTION.md](../services/trading_agent/QUESTION.md) | 0 | 0 | 待开发 |
-| orchestrator | [QUESTION.md](../services/orchestrator/QUESTION.md) | 0 | 0 | 待开发 |
-| db_writer | [QUESTION.md](../services/db_writer/QUESTION.md) | 7 | 10 | 开发中 |
-| watchdog | [QUESTION.md](../services/watchdog/QUESTION.md) | 0 | 0 | 待开发 |
+| ctp_tick | [QUESTION.md](../services/ctp_tick/QUESTION.md) | 4 | 24 | 开发中 |
+| trading_agent | [QUESTION.md](../services/trading_agent/QUESTION.md) | 5 | 0 | 待开发 |
+| orchestrator | [QUESTION.md](../services/orchestrator/QUESTION.md) | 6 | 14 | 开发中 |
+| db_writer | [QUESTION.md](../services/db_writer/QUESTION.md) | 8 | 11 | 开发中 |
+| watchdog | [QUESTION.md](../services/watchdog/QUESTION.md) | 6 | 4 | 开发中 |
 | llm_scorer | [QUESTION.md](../services/llm_scorer/QUESTION.md) | 0 | 0 | 待开发 |
 | intel_collector | [QUESTION.md](../services/intel_collector/QUESTION.md) | 0 | 0 | 待开发 |
 | dashboard_web | [QUESTION.md](../services/dashboard_web/QUESTION.md) | 0 | 0 | 待开发 |
@@ -28,6 +28,7 @@
 |---|---|---|---|---|
 | 1 | 2026-06-13 | go-redis v9.20.1 API 变更：XReadGroupArgs 无 ID 字段，Streams 是 interleaved 格式 `[stream1, id1, stream2, id2]` | 所有 Go 服务 | ✅ 已修复 (pkg/redis/adapter.go) |
 | 2 | 2026-06-13 | golangci-lint v2 配置格式不兼容 v1：必须加 `version: "2"` + linters/formatters 分离 + issues → exclusions 迁移 | 所有 Go 服务 | ✅ 已修复 (.golangci.yml) |
+| 3 | 2026-06-14 | 🔴 orchestrator ↔ trading_agent gRPC 依赖：orchestrator 当前用 rawCodec（JSON 透传），待 trading_agent 开发时 `make gen` 生成 proto stub 后切换。trading_agent 须实现 SubscribeStateChanges RPC（server stream），orchestrator 端 stream.go 已预留接口 | orchestrator + trading_agent | open |
 | 3 | 2026-06-13 | `interface{}` 返回类型导致 `.Close()` 编译错误：Go 不支持对 `interface{}` 直接调用方法 | 所有返回 `interface{}` 的桩代码 | ✅ 已修复 (ctp_tick cmd/main.go) |
 
 ---
