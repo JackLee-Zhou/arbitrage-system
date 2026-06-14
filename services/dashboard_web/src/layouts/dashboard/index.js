@@ -14,7 +14,7 @@ import VuiTypography from "components/VuiTypography";
 import useTradingStore from "stores/trading";
 import useSystemStore from "stores/system";
 
-import { COLORS } from "theme/tokens";
+import { COLORS, GLOW } from "theme/tokens";
 
 import { IoTrendingUp, IoWallet, IoStatsChart, IoPulse } from "react-icons/io5";
 
@@ -35,10 +35,10 @@ const accentBorder = {
 
 // ---- Stat block ------------------------------------------------------------
 function StatBlock({ label, value, sub, accent, icon, to }) {
+  const linkProps = to ? { component: RouterLink, to } : {};
   return (
     <Card
-      component={to ? RouterLink : "div"}
-      to={to}
+      {...linkProps}
       sx={{
         p: 2.5,
         background: COLORS.BG_SURFACE,
@@ -49,7 +49,7 @@ function StatBlock({ label, value, sub, accent, icon, to }) {
         "&:hover": to
           ? {
               border: `1px solid ${COLORS.BORDER_ACTIVE}`,
-              boxShadow: COLORS.GLOW.CARD_HOVER,
+              boxShadow: GLOW.CARD_HOVER,
             }
           : {},
         ...accentBorder,
@@ -79,11 +79,9 @@ function StatBlock({ label, value, sub, accent, icon, to }) {
         sx={{ fontFamily: "'Roboto Mono', monospace", letterSpacing: "-0.5px" }}>
         {value}
       </VuiTypography>
-      {sub && (
-        <VuiTypography variant="caption" color="text">
-          {sub}
-        </VuiTypography>
-      )}
+      {sub != null && (typeof sub === 'string' ? (
+        <VuiTypography variant="caption" color="text">{sub}</VuiTypography>
+      ) : sub)}
     </Card>
   );
 }

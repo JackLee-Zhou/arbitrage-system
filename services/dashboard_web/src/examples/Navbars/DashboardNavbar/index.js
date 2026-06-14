@@ -1,6 +1,5 @@
 // ============================================================================
-// DashboardNavbar — 顶部导航栏（保留 Vision UI 风格）
-// 包含 futures 页面右侧持仓固定栏
+// DashboardNavbar — 顶部导航栏（含 futures 页面右侧持仓固定栏）
 // ============================================================================
 
 import { useState, useEffect } from "react";
@@ -19,7 +18,6 @@ import {
   navbar,
   navbarContainer,
   navbarRow,
-  navbarIconButton,
   navbarMobileMenu,
 } from "examples/Navbars/DashboardNavbar/styles";
 
@@ -27,7 +25,6 @@ import {
   useVisionUIController,
   setTransparentNavbar,
   setMiniSidenav,
-  setOpenConfigurator,
 } from "context";
 
 import useTradingStore from "stores/trading";
@@ -43,7 +40,6 @@ function DashboardNavbar({ absolute, light, isMini }) {
   const { positions, totalFloatPnL } = useTradingStore();
   const isFuturesRoute = location.pathname.startsWith("/futures/");
 
-  // 构建持仓栏内容
   const positionKeys = Object.keys(positions).filter(
     (k) => positions[k] && positions[k].symbol
   );
@@ -56,7 +52,6 @@ function DashboardNavbar({ absolute, light, isMini }) {
   if (isFuturesRoute) {
     if (positionCount === 0) {
       positionText = "💰 当前无持仓";
-      positionPnl = 0;
     } else if (positionCount === 1) {
       const pos = positions[positionKeys[0]];
       const qty = pos.quantity || pos.qty || 0;
@@ -87,9 +82,7 @@ function DashboardNavbar({ absolute, light, isMini }) {
   }, [dispatch, fixedNavbar]);
 
   const handleMiniSidenav = () => setMiniSidenav(dispatch, !miniSidenav);
-  const handleConfiguratorOpen = () => setOpenConfigurator(dispatch, true);
 
-  // Route breadcrumb text
   const routeText = route[route.length - 1] || "概览";
 
   return (
@@ -144,14 +137,6 @@ function DashboardNavbar({ absolute, light, isMini }) {
                 onClick={handleMiniSidenav}
               >
                 <Icon className={"text-white"}>{miniSidenav ? "menu_open" : "menu"}</Icon>
-              </IconButton>
-              <IconButton
-                size="small"
-                color="inherit"
-                sx={{ ...navbarIconButton, fontSize: "26px" }}
-                onClick={handleConfiguratorOpen}
-              >
-                <Icon sx={{ fontSize: "26px" }}>settings</Icon>
               </IconButton>
             </VuiBox>
           </VuiBox>
