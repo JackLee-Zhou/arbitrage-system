@@ -24,7 +24,7 @@
 
 | 工具 | 版本 | 来源 | 用途 |
 |---|---|---|---|
-| **React** | 17 | Vision UI | UI 框架（不主动升级 18） |
+| **React** | 18 | Vision UI | UI 框架（因 @tremor/react@3.x 要求 React 18 而升级） |
 | **JavaScript** | ES2022 | Vision UI | 主语言（不强加 TypeScript） |
 | **Create React App** | 5 | Vision UI | 脚手架（不主动迁移 Vite） |
 | **Material-UI v5** | 5+ | Vision UI | 通用组件 + 容器 |

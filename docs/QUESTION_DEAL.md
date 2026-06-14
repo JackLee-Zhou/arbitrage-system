@@ -17,7 +17,7 @@
 | watchdog | [QUESTION.md](../services/watchdog/QUESTION.md) | 6 | 4 | 开发中 |
 | llm_scorer | [QUESTION.md](../services/llm_scorer/QUESTION.md) | 0 | 0 | 待开发 |
 | intel_collector | [QUESTION.md](../services/intel_collector/QUESTION.md) | 0 | 0 | 待开发 |
-| dashboard_web | [QUESTION.md](../services/dashboard_web/QUESTION.md) | 1 | 0 | 设计阶段 |
+| dashboard_web | [QUESTION.md](../services/dashboard_web/QUESTION.md) | 4 | 12 | 开发中 |
 | stock_tick | [QUESTION.md](../services/stock_tick/QUESTION.md) | 0 | 0 | V2 占位 |
 
 ---

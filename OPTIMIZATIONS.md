@@ -351,13 +351,13 @@
 **背景**：dashboard_web 当前 src/ 为空，需先建立基础工程。
 
 **拆解**：
-- [ ] **OPT-300-a** clone Vision UI Dashboard React 到 services/dashboard_web/，复制源码 + 保留 LICENSE_VISION_UI.md
-- [ ] **OPT-300-b** 改 package.json name + 删 demo 数据 + 删不需要的 layouts（保留 dashboard 模板）
-- [ ] **OPT-300-c** 安装新增依赖：@tremor/react / @tanstack/react-query / zustand / lightweight-charts / tailwindcss（仅作 Tremor 依赖）
-- [ ] **OPT-300-d** 配置 Tailwind 不污染 MUI 默认样式（PostCSS scope）
-- [ ] **OPT-300-e** 设计令牌（颜色/字体/光晕）固化到 src/theme/tokens.js
-- [ ] **OPT-300-f** API 客户端（axios + TanStack Query）+ WebSocket 连接管理
-- [ ] **OPT-300-g** Zustand 全局 store：systemStore + tradingStore
+- [x] **OPT-300-a** clone Vision UI Dashboard React 到 services/dashboard_web/，复制源码 + 保留 LICENSE_VISION_UI.md
+- [x] **OPT-300-b** 改 package.json name + 删 demo 数据 + 删不需要的 layouts（保留 dashboard 模板）
+- [x] **OPT-300-c** 安装新增依赖：@tremor/react / @tanstack/react-query / zustand / lightweight-charts / tailwindcss（仅作 Tremor 依赖）
+- [x] **OPT-300-d** 配置 Tailwind 不污染 MUI 默认样式（PostCSS scope）
+- [x] **OPT-300-e** 设计令牌（颜色/字体/光晕）固化到 src/theme/tokens.js
+- [x] **OPT-300-f** API 客户端（axios + TanStack Query）+ WebSocket 连接管理
+- [x] **OPT-300-g** Zustand 全局 store：systemStore + tradingStore
 
 **Acceptance Criteria**：
 - `npm start` 能跑出 Vision UI 自带的概览页
@@ -698,6 +698,7 @@
 | 2026-06-14 | OPT-201-a~d | claude-code | 完成 ctp_tick 合约元数据写入：新增 contracts/instrument.proto、domain/ 推导映射表（含 6 交易所 60+ 品种的中文名/乘数/最小变动/保证金率）、metadata 适配器（Redis instruments:all+instrument:<symbol> + InfluxDB Line Protocol HTTP），main.go 装配 + 11 个 unit 测试 + README 登记 | -- |
 | 2026-06-14 | OPT-002-a~d | claude-code (team) | 完成服务注册逻辑抽取：新增 pkg/registry/heartbeat.go（RegisterAndKeepAlive）+ heartbeat_test.go（6 测试），3 个 Go 服务（trading_agent/orchestrator/watchdog）接入服务注册，pkg/registry 现有 23 测试全部通过 | -- |
 | 2026-06-14 | OPT-202-a~d | claude-code (team) | 完成 ctp_tick 全市场最新价快照：新增 domain/PriceSnapshot+LastPriceStore、adapters/redis/SnapshotWriter（1s 批量写入 TTL 60s）、api/snapshot.go（GET /internal/snapshot 端点），main.go 装配 + 7 个 unit 测试 + README 登记 | -- |
+| 2026-06-14 | OPT-300-a~g | claude-code (team) | 完成 dashboard 脚手架：clone Vision UI → 裁剪模板（删 50+ demo 文件）→ 安装依赖 → Tailwind preflight:false → 设计令牌 → API/WS 客户端 → Zustand stores → 5-tab 路由 + 13 个占位页面 → 构建通过 (170KB gzipped) | -- |
 
 ---
 

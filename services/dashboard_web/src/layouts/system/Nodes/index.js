@@ -1,0 +1,32 @@
+// ============================================================================
+// 9 个服务健康度详情 + 关键指标 — OPT-307
+// ============================================================================
+
+import DashboardLayout from "examples/LayoutContainers/DashboardLayout";
+import DashboardNavbar from "examples/Navbars/DashboardNavbar";
+import VuiBox from "components/VuiBox";
+import VuiTypography from "components/VuiTypography";
+import { Card } from "@mui/material";
+
+function SystemNodes() {
+  return (
+    <DashboardLayout>
+      <DashboardNavbar />
+      <VuiBox py={3}>
+        <Card sx={{ p: 4, textAlign: "center" }}>
+          <VuiTypography variant="h4" color="white" fontWeight="bold" mb={2}>
+            SystemNodes
+          </VuiTypography>
+          <VuiTypography variant="body1" color="text" mb={1}>
+            9 个服务健康度详情 + 关键指标
+          </VuiTypography>
+          <VuiTypography variant="caption" color="text">
+            OPT: OPT-307 — 待实现
+          </VuiTypography>
+        </Card>
+      </VuiBox>
+    </DashboardLayout>
+  );
+}
+
+export default SystemNodes;
