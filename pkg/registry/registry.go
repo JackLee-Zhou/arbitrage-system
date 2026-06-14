@@ -57,10 +57,11 @@ type ServiceInfo struct {
 	// 因此明确移除 omitempty 以避免未来 Go 版本行为变化导致丢失该字段。
 	StartedAt time.Time `json:"started_at"`
 
-	// HealthURL 健康检查地址，如 ":8081"
+	// HealthURL 健康检查地址，形如 "host:port"（如 "localhost:8081" 或 "ctp_tick:8081"）
+	// watchdog 等发现方直接用它探测，不做二次拼接
 	HealthURL string `json:"health_url,omitempty"`
 
-	// MetricsURL 指标地址，如 ":8081"
+	// MetricsURL 指标地址，形如 "host:port"
 	MetricsURL string `json:"metrics_url,omitempty"`
 
 	// GRPCAddr gRPC 地址（可选），如 ":9090"

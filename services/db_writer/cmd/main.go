@@ -61,14 +61,18 @@ func main() {
 	// ---- Step 4: 创建指标收集器 ----
 	metrics := api.NewMetrics(config.AllBuckets(), config.AllStreams())
 
-	// ---- Step 5: 注册服务 ----
+	// ---- Step 5: 注册服务（三元组：host + port + 类型）----
 	startTime := time.Now()
+	host := cfg.ServiceHost
+	if host == "" {
+		host = cfg.ServiceName
+	}
 	reg, err := pkgregistry.Register(context.Background(), redisClient, pkgregistry.ServiceInfo{
 		Name:         cfg.ServiceName,
 		Version:      serviceVersion,
 		StartedAt:    startTime,
-		HealthURL:    fmt.Sprintf(":%d", cfg.HealthPort),
-		MetricsURL:   fmt.Sprintf(":%d", cfg.HealthPort),
+		HealthURL:    fmt.Sprintf("%s:%d", host, cfg.HealthPort),
+		MetricsURL:   fmt.Sprintf("%s:%d", host, cfg.HealthPort),
 		Capabilities: []string{"influxdb_writer"},
 	})
 	if err != nil {

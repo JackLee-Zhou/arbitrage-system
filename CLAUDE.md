@@ -9,6 +9,7 @@
 3. **业务逻辑（domain/）零外部依赖，所有 IO 在 adapters/**
 4. **每个服务必须有 `/healthz` 和 `/metrics` 端点**
 5. **单元测试不能依赖外部服务**（mock/fake 替代）
+6. **每个服务启动时必须向 Redis 注册自己的地址、端口、类型**（`pkg/registry`，三元组：`host:port` + name + capabilities），watchdog 和其他服务通过 `services:*` 自动发现，禁止硬编码地址
 
 ## 目录结构
 ```

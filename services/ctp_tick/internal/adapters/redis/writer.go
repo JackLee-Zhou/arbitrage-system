@@ -6,6 +6,8 @@ import (
 	"encoding/json"
 	"fmt"
 	"log"
+	"strconv"
+	"strings"
 	"sync"
 	"time"
 
@@ -80,16 +82,23 @@ func NewTickWriter(client pkgredis.RedisClient, focusSymbols []string) *TickWrit
 // Send 非阻塞发送 Tick 到写入管道。返回 true=入队成功，false=丢弃。
 func (w *TickWriter) Send(symbol string, tick *domain.StandardTick) bool {
 	protoTick := tick.ToProto()
+
+	// InfluxDB Line Protocol（供 db_writer 直接消费）
+	lp := formatLineProtocol(protoTick)
+
+	// 完整 JSON（供调试和其他消费者）
 	payload, err := json.Marshal(protoTick)
 	if err != nil {
 		return false
 	}
+
 	values := map[string]interface{}{
 		"symbol":    protoTick.Symbol,
 		"timestamp": protoTick.Timestamp,
 		"price":     protoTick.LastPrice,
 		"volume":    protoTick.Volume,
-		"data":      string(payload),
+		"data":      lp,              // Line Protocol → db_writer Option 1
+		"json_data": string(payload), // 完整 JSON → 调试
 	}
 	task := &writeTask{symbol: symbol, values: values}
 
@@ -103,6 +112,57 @@ func (w *TickWriter) Send(symbol string, tick *domain.StandardTick) bool {
 		}
 		return false
 	}
+}
+
+// formatFloatLP 将 float64 格式化为 InfluxDB Line Protocol 兼容的浮点字面量
+// 关键：必须始终包含小数点，否则 InfluxDB 会将整数值推断为 int 类型，
+// 与后续浮点值冲突报错 "field type conflict"。
+func formatFloatLP(v float64) string {
+	return strconv.FormatFloat(v, 'f', -1, 64)
+}
+
+// escapeLP 转义 InfluxDB Line Protocol tag value 中的特殊字符
+// (, =, 空格, \ 需反斜杠转义)
+func escapeLP(s string) string {
+	if !strings.ContainsAny(s, `,= \`) {
+		return s
+	}
+	s = strings.ReplaceAll(s, `\`, `\\`)
+	s = strings.ReplaceAll(s, `,`, `\,`)
+	s = strings.ReplaceAll(s, `=`, `\=`)
+	s = strings.ReplaceAll(s, ` `, `\ `)
+	return s
+}
+
+// formatLineProtocol 将 ProtoTick 格式化为 InfluxDB Line Protocol
+// 格式: measurement,tag_set field_set timestamp_ns
+func formatLineProtocol(t *domain.ProtoTick) string {
+	// 测量名: tick
+	// Tag: symbol（索引维度，特殊字符已转义）
+	// Fields: 所有行情字段（浮点数强制保留小数点）
+	// Timestamp: 毫秒 → 纳秒（InfluxDB 要求纳秒精度）
+
+	fields := []string{
+		fmt.Sprintf("last_price=%s", formatFloatLP(t.LastPrice)),
+		fmt.Sprintf("volume=%di", t.Volume),
+		fmt.Sprintf("open_price=%s", formatFloatLP(t.OpenPrice)),
+		fmt.Sprintf("high_price=%s", formatFloatLP(t.HighPrice)),
+		fmt.Sprintf("low_price=%s", formatFloatLP(t.LowPrice)),
+		fmt.Sprintf("pre_close=%s", formatFloatLP(t.PreClose)),
+		fmt.Sprintf("pre_settle=%s", formatFloatLP(t.PreSettle)),
+		fmt.Sprintf("open_interest=%s", formatFloatLP(t.OpenInterest)),
+		fmt.Sprintf("upper_limit=%s", formatFloatLP(t.UpperLimit)),
+		fmt.Sprintf("lower_limit=%s", formatFloatLP(t.LowerLimit)),
+		fmt.Sprintf("bid_price1=%s", formatFloatLP(t.BidPrice1)),
+		fmt.Sprintf("bid_volume1=%di", t.BidVolume1),
+		fmt.Sprintf("ask_price1=%s", formatFloatLP(t.AskPrice1)),
+		fmt.Sprintf("ask_volume1=%di", t.AskVolume1),
+	}
+
+	// InfluxDB 时间戳用纳秒
+	tsNs := t.Timestamp * 1_000_000
+
+	return fmt.Sprintf("tick,symbol=%s %s %d", escapeLP(t.Symbol), strings.Join(fields, ","), tsNs)
 }
 
 // Close 优雅关闭：停止 writerLoop → 排空 tickCh → 等待 flushBatch 完成

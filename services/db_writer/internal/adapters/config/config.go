@@ -11,6 +11,7 @@ import (
 // Config db_writer 服务配置
 type Config struct {
 	ServiceName     string        // DB_WRITER_SERVICE_NAME, default "db_writer"
+	ServiceHost     string        // DB_WRITER_SERVICE_HOST, 本机可达地址（空 → 用 ServiceName 兜底）
 	RedisAddr       string        // DB_WRITER_REDIS_ADDR, default "redis:6379"
 	InfluxDBURL     string        // DB_WRITER_INFLUXDB_URL
 	InfluxDBToken   string        // DB_WRITER_INFLUXDB_TOKEN
@@ -52,6 +53,7 @@ var DefaultStreams = []string{
 func Load() Config {
 	return Config{
 		ServiceName:         getEnv("DB_WRITER_SERVICE_NAME", "db_writer"),
+		ServiceHost:         getEnv("DB_WRITER_SERVICE_HOST", ""),
 		RedisAddr:           getEnv("DB_WRITER_REDIS_ADDR", "redis:6379"),
 		InfluxDBURL:         getEnv("DB_WRITER_INFLUXDB_URL", "http://influxdb:8086"),
 		InfluxDBToken:       getEnv("DB_WRITER_INFLUXDB_TOKEN", ""),

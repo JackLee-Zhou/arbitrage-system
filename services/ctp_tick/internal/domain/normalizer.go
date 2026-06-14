@@ -3,6 +3,8 @@ package domain
 
 import (
 	"fmt"
+	"log"
+	"sync"
 	"time"
 )
 
@@ -160,11 +162,30 @@ func safeVolume(price float64, volume int64) int64 {
 // 时间解析
 // ============================================================
 
+// ctpLocation 缓存 CTP 行情的 Asia/Shanghai 时区，避免每次 tick 都调 LoadLocation（热路径 IO）。
+var (
+	ctpLocation     *time.Location
+	ctpLocationOnce sync.Once
+)
+
+func getCTPLocation() *time.Location {
+	ctpLocationOnce.Do(func() {
+		loc, err := time.LoadLocation("Asia/Shanghai")
+		if err != nil {
+			log.Printf("[domain] WARNING: LoadLocation Asia/Shanghai failed (%v), falling back to Local, tick timestamps may be off by 8 hours", err)
+			loc = time.Local
+		}
+		ctpLocation = loc
+	})
+	return ctpLocation
+}
+
 // parseTimestamp 解析 CTP 交易日 + 更新时间 + 毫秒
 // 优先使用组合时间，失败则回退到系统当前时间（与 Python ctp_engine 一致）
+// CTP 行情时间使用 Asia/Shanghai 时区（真实 CTP 系统输出北京时间）
 func parseTimestamp(tradingDay, updateTime string, millisec int32) time.Time {
 	if tradingDay != "" && updateTime != "" {
-		if t, err := time.Parse(TradingDayLayout+" "+TimeFormatCTP, tradingDay+" "+updateTime); err == nil {
+		if t, err := time.ParseInLocation(TradingDayLayout+" "+TimeFormatCTP, tradingDay+" "+updateTime, getCTPLocation()); err == nil {
 			return t.Add(time.Duration(millisec) * time.Millisecond)
 		}
 	}

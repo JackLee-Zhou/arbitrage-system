@@ -15,6 +15,7 @@
 | 5 | 2026-06-14 | InfluxDB HTTP 超时依赖默认值，未显式设置 `SetHTTPRequestTimeout` | 🟢 | open |
 | 6 | 2026-06-14 | `processMessages` 持锁期间发起 XACK 网络调用（当前单 goroutine 安全，后续并发路径有风险） | 🟢 | open |
 | 7 | 2026-06-14 | go.mod 版本 `1.26.4` 与 CLAUDE.md 声明的 `Go 1.22` 不一致 | 🟢 | open |
+| 8 | 2026-06-14 | 🔴 Stream 被删除（`DEL write:tick`）后消费组随之丢失，XREADGROUP 持续报 NOGROUP，需重启服务才能自动重建 | 🔴 | open |
 
 ---
 
@@ -32,6 +33,7 @@
 | 8 | 2026-06-14 | 2026-06-14 | 🟢 `XGroupCreate` 错误被 `_` 完全吞掉（包括网络错误和权限错误） | 非 BUSYGROUP 错误记录日志 | v1.0.0 |
 | 9 | 2026-06-14 | 2026-06-14 | 🟢 gofmt 格式不一致（dingtalk.go, consumer.go, dlq.go, main.go, healthz.go） | `gofmt -w` 批量格式化 | v1.0.0 |
 | 10 | 2026-06-14 | 2026-06-14 | 🟢 lint: `errcheck` — `resp.Body.Close` 和 `fmt.Fprint` 返回值未检查 | defer func + `_, _ =` 显式忽略 | v1.0.0 |
+| 11 | 2026-06-14 | 2026-06-14 | 🔴 `Close()` 将 `writeAPIs` 置 nil 后，若残留 goroutine 调用 `getOrCreateWriteAPI` 写入 nil map → panic | nil 检查 + 日志告警 + 返回 error | v1.0.1 |
 
 ---
 
@@ -41,3 +43,5 @@
 |---|---|---|
 | v1.0 | 2026-06-13 | 占位初版 |
 | v1.1 | 2026-06-14 | 首轮开发：10 个问题（3🔴 + 4🟡 + 3🟢）已修复，7 个待解决 |
+| v1.2 | 2026-06-14 | 通讯调试：发现 Stream 删除后消费组丢失导致 NOGROUP 问题 |
+| v1.3 | 2026-06-14 | 代码审查修复：Close() nil map panic 防御 + formatFloatLP + parseTimestamp 时区缓存 |

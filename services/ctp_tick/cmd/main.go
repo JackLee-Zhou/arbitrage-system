@@ -4,6 +4,7 @@ package main
 
 import (
 	"context"
+	"fmt"
 	"log"
 	"net/http"
 	"os"
@@ -13,6 +14,7 @@ import (
 	"time"
 
 	pkgredis "github.com/arbitrage-system/pkg/redis"
+	pkgregistry "github.com/arbitrage-system/pkg/registry"
 
 	"github.com/arbitrage-system/ctp_tick/internal/adapters/ctp"
 	"github.com/arbitrage-system/ctp_tick/internal/adapters/redis"
@@ -64,6 +66,23 @@ func main() {
 			}
 			return *t
 		},
+	}
+
+	// ---- 服务注册 → Redis（三元组：host + port + 类型）----
+	host := cfg.ServiceHost
+	if host == "" {
+		host = cfg.ServiceName // Docker Compose 下容器名即 hostname
+	}
+	reg, err := pkgregistry.Register(context.Background(), redisClient, pkgregistry.ServiceInfo{
+		Name:         cfg.ServiceName,
+		Version:      "0.2.3",
+		StartedAt:    time.Now(),
+		HealthURL:    fmt.Sprintf("%s:%s", host, cfg.HealthPort),
+		MetricsURL:   fmt.Sprintf("%s:%s", host, cfg.HealthPort),
+		Capabilities: []string{"tick", "focus_push", "batch_write"},
+	})
+	if err != nil {
+		log.Fatalf("[ctp_tick] service registration failed: %v", err)
 	}
 
 	// ---- HTTP 服务 ----
@@ -146,6 +165,9 @@ func main() {
 	if err := httpServer.Shutdown(shutdownCtx); err != nil {
 		log.Printf("[ctp_tick] HTTP shutdown timeout, force exit")
 	}
+	if err := reg.Shutdown(shutdownCtx); err != nil {
+		log.Printf("[ctp_tick] registry shutdown error: %v", err)
+	}
 	_ = redisClient.Close()
 
 	log.Printf("[ctp_tick] shutdown complete (received=%d dropped=%d)",
@@ -199,6 +221,7 @@ func convertToRaw(raw *ctp.DepthMarketData) *domain.RawMarketData {
 
 type Config struct {
 	ServiceName      string
+	ServiceHost      string // 本机可达地址，如 "localhost"（本地）或 "ctp_tick"（Docker）
 	HealthPort       string
 	RedisAddr        string
 	CTPFrontAddr     string
@@ -212,6 +235,7 @@ type Config struct {
 func loadConfig() Config {
 	return Config{
 		ServiceName:      getEnv("SERVICE_NAME", "ctp_tick"),
+		ServiceHost:      getEnv("SERVICE_HOST", ""), // 空 → 用 ServiceName 兜底
 		HealthPort:       getEnv("HEALTH_PORT", "8081"),
 		RedisAddr:        getEnv("REDIS_ADDR", "redis:6379"),
 		CTPFrontAddr:     getEnv("CTP_FRONT_ADDR", "tcp://180.168.146.187:10130"),

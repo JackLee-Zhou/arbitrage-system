@@ -92,6 +92,9 @@ func (w *Writer) WriteBatch(ctx context.Context, bucket string, records []string
 func (w *Writer) writeBatchOnce(ctx context.Context, bucket string, records []string) error {
 	// 获取或缓存 WriteAPIBlocking 实例
 	writeAPI := w.getOrCreateWriteAPI(bucket)
+	if writeAPI == nil {
+		return fmt.Errorf("influxdb writer is closed, cannot write to bucket %s", bucket)
+	}
 
 	// 应用写入超时
 	if w.writeTimeout > 0 {
@@ -114,6 +117,11 @@ func (w *Writer) getOrCreateWriteAPI(bucket string) api.WriteAPIBlocking {
 
 	w.mu.Lock()
 	defer w.mu.Unlock()
+	// 防御：Close() 已将 writeAPIs 置为 nil，说明 writer 已关闭
+	if w.writeAPIs == nil {
+		log.Printf("[influxdb] writer is closed, cannot create WriteAPI for bucket %s", bucket)
+		return nil
+	}
 	// Double-check
 	writeAPI, ok = w.writeAPIs[bucket]
 	if !ok {
