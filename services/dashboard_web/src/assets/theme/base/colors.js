@@ -28,7 +28,7 @@ export default {
   },
 
   sidenav: {
-    button: "#0D1321",
+    button: "#0D2040",
   },
 
   text: {

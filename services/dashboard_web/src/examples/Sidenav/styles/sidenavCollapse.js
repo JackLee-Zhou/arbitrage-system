@@ -6,7 +6,7 @@ function collapseItem(theme, ownerState) {
   const { pxToRem } = functions;
 
   return {
-    background: active ? "rgba(0,229,255,0.08)" : transparent.main,
+    background: active ? "rgba(0,117,255,0.18)" : transparent.main,
     color: active ? palette.white.main : palette.text.main,
     display: "flex",
     alignItems: "center",
@@ -18,14 +18,14 @@ function collapseItem(theme, ownerState) {
     userSelect: "none",
     whiteSpace: "nowrap",
     position: "relative",
-    borderLeft: active ? `2px solid ${palette.info.main}` : "2px solid transparent",
+    borderLeft: active ? `2px solid #4D9FFF` : "2px solid transparent",
     transition: transitions.create(["background", "border-color", "color"], {
       easing: transitions.easing.easeInOut,
       duration: transitions.duration.shorter,
     }),
 
     "&:hover": {
-      background: active ? "rgba(0,229,255,0.12)" : "rgba(255,255,255,0.04)",
+      background: active ? "rgba(0,117,255,0.22)" : "rgba(255,255,255,0.04)",
     },
 
     [breakpoints.up("xl")]: {

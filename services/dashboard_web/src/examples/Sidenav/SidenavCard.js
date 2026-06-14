@@ -20,8 +20,8 @@ function SidenavCard({ ...rest }) {
   return (
     <Card
       sx={{
-        background: "rgba(0,229,255,0.05)",
-        border: "1px solid rgba(0,229,255,0.10)",
+        background: "rgba(0,117,255,0.08)",
+        border: "1px solid rgba(0,117,255,0.12)",
         borderRadius: "10px",
         overflow: "hidden",
       }}

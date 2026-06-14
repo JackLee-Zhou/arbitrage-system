@@ -53,7 +53,7 @@ export default styled(Drawer)(({ theme, ownerState }) => {
     "& .MuiDrawer-paper": {
       boxShadow: `0 0 30px rgba(0,0,0,0.4)`,
       border: "none",
-      background: "#0B0F1A",
+      background: "linear-gradient(180deg, #0A1628 0%, #0D1F3C 50%, #0B1830 100%)",
       ...(miniSidenav ? drawerCloseStyles() : drawerOpenStyles()),
     },
   };
