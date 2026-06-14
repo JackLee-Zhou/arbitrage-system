@@ -16,6 +16,7 @@ import (
 	pkgredis "github.com/arbitrage-system/pkg/redis"
 	pkgregistry "github.com/arbitrage-system/pkg/registry"
 
+	"github.com/arbitrage-system/orchestrator/internal/adapters"
 	"github.com/arbitrage-system/orchestrator/internal/adapters/audit_writer"
 	"github.com/arbitrage-system/orchestrator/internal/adapters/config"
 	redisreader "github.com/arbitrage-system/orchestrator/internal/adapters/redis"
@@ -48,6 +49,10 @@ func main() {
 
 	// 审计日志
 	auditWriter := audit_writer.NewWriter(redisClient)
+
+	// 服务健康巡检（从 Redis 发现 + 探 /healthz → 缓存结果 → overview 暴露）
+	healthPoller := adapters.NewHealthPoller(redisClient, 15*time.Second)
+	go healthPoller.Start(context.Background())
 
 	// 服务注册
 	startTime := time.Now()
@@ -89,7 +94,7 @@ func main() {
 		_, _ = fmt.Fprintf(w, "# orchestrator metrics\norchestrator_uptime_seconds %d\n", uptime)
 	})
 
-	mux.HandleFunc("/api/v1/overview", makeOverviewHandler(redisReader, tradingClient))
+	mux.HandleFunc("/api/v1/overview", makeOverviewHandler(redisReader, tradingClient, healthPoller))
 	mux.HandleFunc("/api/v1/positions", makePositionsHandler(redisReader, tradingClient))
 	mux.HandleFunc("/api/v1/emergency_close", makeEmergencyCloseHandler(tradingClient, auditWriter))
 	mux.HandleFunc("/api/v1/strategies", makeStrategiesHandler(tradingClient, auditWriter))
@@ -144,11 +149,15 @@ func main() {
 // REST Handler
 // ============================================================
 
-func makeOverviewHandler(redis *redisreader.Reader, trading *trading_client.Client) http.HandlerFunc {
+func makeOverviewHandler(redis *redisreader.Reader, trading *trading_client.Client, health *adapters.HealthPoller) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
 		ctx := r.Context()
-		result := map[string]interface{}{"service": "orchestrator", "status": "ok"}
+		result := map[string]interface{}{
+			"service":  "orchestrator",
+			"status":   "ok",
+			"services": health.Snapshot(),
+		}
 		if score, err := redis.AIScore(ctx, "MA2509"); err == nil {
 			result["ai_score"] = score
 		}
