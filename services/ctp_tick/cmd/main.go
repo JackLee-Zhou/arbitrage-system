@@ -42,7 +42,6 @@ func main() {
 
 	// 全市场快照 Redis 写入器（后台 1s 批量写入）
 	snapshotWriter := redis.NewSnapshotWriter(lastPriceStore, redisClient)
-	defer snapshotWriter.Close()
 
 	// 合约查询器（TD API — Mock 或 cgo 真实现）
 	contractQuerier := ctp.NewContractQuerier()
@@ -180,7 +179,8 @@ func main() {
 	defer shutdownCancel()
 
 	mdAPI.Close()
-	tickWriter.Close() // 等待 writerLoop 结束 + flush 残余数据
+	tickWriter.Close()     // 等待 writerLoop 结束 + flush 残余数据
+	snapshotWriter.Close() // 最终 flush 快照（必须在 redisClient.Close 前）
 	if err := httpServer.Shutdown(shutdownCtx); err != nil {
 		log.Printf("[ctp_tick] HTTP shutdown timeout, force exit")
 	}
