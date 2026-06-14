@@ -13,7 +13,7 @@
 | ctp_tick | [QUESTION.md](../services/ctp_tick/QUESTION.md) | 2 | 22 | 开发中 |
 | trading_agent | [QUESTION.md](../services/trading_agent/QUESTION.md) | 0 | 0 | 待开发 |
 | orchestrator | [QUESTION.md](../services/orchestrator/QUESTION.md) | 0 | 0 | 待开发 |
-| db_writer | [QUESTION.md](../services/db_writer/QUESTION.md) | 0 | 0 | 待开发 |
+| db_writer | [QUESTION.md](../services/db_writer/QUESTION.md) | 7 | 10 | 开发中 |
 | watchdog | [QUESTION.md](../services/watchdog/QUESTION.md) | 0 | 0 | 待开发 |
 | llm_scorer | [QUESTION.md](../services/llm_scorer/QUESTION.md) | 0 | 0 | 待开发 |
 | intel_collector | [QUESTION.md](../services/intel_collector/QUESTION.md) | 0 | 0 | 待开发 |
@@ -53,6 +53,42 @@
 | 1 | ctp_tick | cgo C struct 字段提取未实现 | 需 Linux 容器 + openctp 头文件 |
 | 2 | ctp_tick | ReqUserLogin C 结构体构建未完成 | 需 openctp/ctp-go 头文件 |
 
+### 2026-06-14
+
+#### 修复（10 项 — db_writer）
+
+| # | 服务 | 描述 | 修复方式 |
+|---|---|---|---|
+| 1 | db_writer | 🔴 DLQ TTL 用 SET 操作 Stream key 返回 WRONGTYPE | pkg/redis 新增 Expire 接口，dlq.go 改用 Expire |
+| 2 | db_writer | 🔴 XACK 在 InfluxDB 写入前执行，写入失败数据丢失 | 重构消息处理：缓存 ID，写入成功/DLQ 成功后才 XACK |
+| 3 | db_writer | 🔴 influxWriter.Close() 被 defer + 显式双重调用 | 删除 main.go 显式 Close() |
+| 4 | db_writer | 🟡 ctx 取消后 flushRemaining 用已取消 ctx | 改为 context.Background() |
+| 5 | db_writer | 🟡 XGroupCreate 缺少 MKSTREAM | 改为 XGroupCreateMkStream |
+| 6 | db_writer | 🟡 /healthz 始终返回 200，unhealthy 仍路由流量 | 根据状态设置 200/503 |
+| 7 | db_writer | 🟡 重试 off-by-one：MaxRetries=3 实际只用 2 次 | 修正 ShouldRetry 参数 |
+| 8 | db_writer | 🟢 XGroupCreate 错误完全吞掉 | 非 BUSYGROUP 错误记录日志 |
+| 9 | db_writer | 🟢 gofmt 格式不一致（5 文件） | gofmt -w 格式化 |
+| 10 | db_writer | 🟢 lint: errcheck — Body.Close/fmt.Fprint 返回值 | defer func / `_, _ =` |
+
+#### 待解决（7 项 — db_writer）
+
+| # | 服务 | 描述 | 阻塞因素 |
+|---|---|---|---|
+| 1 | db_writer | DLQ 写入逐条 XADD，大量失败时性能差 | 低优先级 |
+| 2 | db_writer | ConsumerLag 指标未实际采集 | 需 XINFO GROUPS |
+| 3 | db_writer | getEnv 模式三处重复（ctp_tick/watchdog/db_writer） | 待抽取 pkg/env |
+| 4 | db_writer | Stream→Bucket 映射硬编码 | 设计决策 |
+| 5 | db_writer | InfluxDB HTTP 超时未显式设置 | 低优先级 |
+| 6 | db_writer | processMessages 持锁期间网络调用 | 当前单 goroutine 安全 |
+| 7 | db_writer | go.mod 版本 1.26.4 vs CLAUDE.md 1.22 | 待统一 |
+
+#### 基础设施
+
+| # | 描述 | 影响范围 | 状态 |
+|---|---|---|---|
+| 1 | pkg/registry 服务注册/心跳包创建 | 全部 Go 服务 | ✅ 已交付 (OPT-002 Phase 1) |
+| 2 | pkg/redis 新增 XLen/XGroupCreate/Expire 方法 | db_writer | ✅ 已交付 |
+
 ---
 
 ## 文档变更记录
@@ -60,3 +96,4 @@
 | 版本 | 日期 | 变更 |
 |---|---|---|
 | v1.0 | 2026-06-13 | 初版，汇总 ctp_tick 开发过程 7 个已修复 + 2 个待解决 + 3 个通用问题 |
+| v1.1 | 2026-06-14 | db_writer 首轮开发：10 修复 + 7 待解决；db_writer 状态更新为"开发中"；pkg/registry + pkg/redis 扩展交付 |
