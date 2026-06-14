@@ -6,7 +6,7 @@ import DashboardNavbar from "examples/Navbars/DashboardNavbar";
 import VuiBox from "components/VuiBox";
 import VuiTypography from "components/VuiTypography";
 import VuiBadge from "components/VuiBadge";
-import { COLORS } from "theme/tokens";
+const AI_STALE = "#FFAB00";
 
 const CHAIN_STEPS = [
   "raw", "parsed", "cleaned", "analysis", "snapshot", "score", "decision", "order",
@@ -47,8 +47,8 @@ function Decisions() {
               alignItems: "center",
               justifyContent: "center",
               borderRadius: 2,
-              border: `1px dashed ${COLORS.AI_STALE}44`,
-              background: `repeating-linear-gradient(45deg, ${COLORS.AI_STALE}08, ${COLORS.AI_STALE}08 8px, transparent 8px, transparent 16px)`,
+              border: `1px dashed ${AI_STALE}44`,
+              background: `repeating-linear-gradient(45deg, ${AI_STALE}08, ${AI_STALE}08 8px, transparent 8px, transparent 16px)`,
             }}
           >
             <VuiTypography variant="body2" color="text" textAlign="center" mb={1}>

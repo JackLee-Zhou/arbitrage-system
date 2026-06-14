@@ -5,7 +5,7 @@ import DashboardLayout from "examples/LayoutContainers/DashboardLayout";
 import DashboardNavbar from "examples/Navbars/DashboardNavbar";
 import VuiBox from "components/VuiBox";
 import VuiTypography from "components/VuiTypography";
-import { COLORS } from "theme/tokens";
+const AI_STALE = "#FFAB00";
 
 const PLACEHOLDER_STYLES = {
   height: 160,
@@ -13,8 +13,8 @@ const PLACEHOLDER_STYLES = {
   alignItems: "center",
   justifyContent: "center",
   borderRadius: 2,
-  border: `1px dashed ${COLORS.AI_STALE}44`,
-  background: `repeating-linear-gradient(45deg, ${COLORS.AI_STALE}08, ${COLORS.AI_STALE}08 8px, transparent 8px, transparent 16px)`,
+  border: `1px dashed ${AI_STALE}44`,
+  background: `repeating-linear-gradient(45deg, ${AI_STALE}08, ${AI_STALE}08 8px, transparent 8px, transparent 16px)`,
 };
 
 function Sentiment() {

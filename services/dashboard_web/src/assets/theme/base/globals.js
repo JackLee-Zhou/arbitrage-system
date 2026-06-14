@@ -1,7 +1,25 @@
+/*!
+
+=========================================================
+* Vision UI Free React - v1.0.0
+=========================================================
+
+* Product Page: https://www.creative-tim.com/product/vision-ui-free-react
+* Copyright 2021 Creative Tim (https://www.creative-tim.com/)
+* Licensed under MIT (https://github.com/creativetimofficial/vision-ui-free-react/blob/master LICENSE.md)
+
+* Design and Coded by Simmmple & Creative Tim
+
+=========================================================
+
+* The above copyright notice and this permission notice shall be included in all copies or substantial portions of the Software.
+
+*/
+
+// Vision UI Dashboard React Base Styles
 import colors from "assets/theme/base/colors";
 
 const { info, dark } = colors;
-
 export default {
   html: {
     scrollBehavior: "smooth",
@@ -9,11 +27,7 @@ export default {
   },
   body: {
     background: dark.body,
-    backgroundImage: `
-      radial-gradient(ellipse at 50% 0%, rgba(0,229,255,0.04) 0%, transparent 60%),
-      radial-gradient(ellipse at 80% 100%, rgba(0,230,118,0.03) 0%, transparent 50%),
-      linear-gradient(180deg, #070B14 0%, #0D1321 50%, #070B14 100%)
-    `,
+    backgroundImage: "linear-gradient(135deg, #0F1535 0%, #1A1F3A 50%, #0D1117 100%)",
   },
   "*, *::before, *::after": {
     margin: 0,

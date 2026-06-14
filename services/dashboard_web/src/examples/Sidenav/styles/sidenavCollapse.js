@@ -1,35 +1,52 @@
+/*!
+
+=========================================================
+* Vision UI Free React - v1.0.0
+=========================================================
+
+* Product Page: https://www.creative-tim.com/product/vision-ui-free-react
+* Copyright 2021 Creative Tim (https://www.creative-tim.com/)
+* Licensed under MIT (https://github.com/creativetimofficial/vision-ui-free-react/blob/master LICENSE.md)
+
+* Design and Coded by Simmmple & Creative Tim
+
+=========================================================
+
+* The above copyright notice and this permission notice shall be included in all copies or substantial portions of the Software.
+
+*/
+
 function collapseItem(theme, ownerState) {
-  const { palette, transitions, breakpoints, functions } = theme;
+  const { palette, transitions, breakpoints, boxShadows, borders, functions } = theme;
   const { active, transparentSidenav } = ownerState;
 
-  const { transparent, dark } = palette;
+  const { transparent, white, sidenav } = palette;
+  const { xxl } = boxShadows;
+  const { borderRadius } = borders;
   const { pxToRem } = functions;
 
   return {
-    background: active ? "rgba(0,117,255,0.18)" : transparent.main,
-    color: active ? palette.white.main : palette.text.main,
+    background: active ? sidenav.button : transparent.main,
+    color: white.main,
     display: "flex",
     alignItems: "center",
     width: "100%",
-    padding: `${pxToRem(10)} ${pxToRem(14)} ${pxToRem(10)} ${pxToRem(14)}`,
-    margin: `${pxToRem(1)} ${pxToRem(8)}`,
-    borderRadius: "8px",
+    padding: `${pxToRem(10.8)} ${pxToRem(12.8)} ${pxToRem(10.8)} ${pxToRem(16)}`,
+    margin: `0 ${pxToRem(16)}`,
+    borderRadius: borderRadius.lg,
     cursor: "pointer",
     userSelect: "none",
     whiteSpace: "nowrap",
-    position: "relative",
-    borderLeft: active ? `2px solid #4D9FFF` : "2px solid transparent",
-    transition: transitions.create(["background", "border-color", "color"], {
-      easing: transitions.easing.easeInOut,
-      duration: transitions.duration.shorter,
-    }),
-
-    "&:hover": {
-      background: active ? "rgba(0,117,255,0.22)" : "rgba(255,255,255,0.04)",
-    },
-
+    boxShadow: active && transparentSidenav ? xxl : "none",
     [breakpoints.up("xl")]: {
-      transition: transitions.create(["background", "border-color", "color", "box-shadow"], {
+      boxShadow: () => {
+        if (active) {
+          return transparentSidenav ? xxl : "none";
+        }
+
+        return "none";
+      },
+      transition: transitions.create("box-shadow", {
         easing: transitions.easing.easeInOut,
         duration: transitions.duration.shorter,
       }),
@@ -38,31 +55,59 @@ function collapseItem(theme, ownerState) {
 }
 
 function collapseIconBox(theme, ownerState) {
-  const { palette, transitions, breakpoints, functions } = theme;
-  const { active } = ownerState;
+  const { palette, transitions, breakpoints, boxShadows, borders, functions } = theme;
+  const { active, color } = ownerState;
 
+  const { white, info, gradients, transparent, sidenav } = palette;
+  const { md } = boxShadows;
+  const { borderRadius } = borders;
   const { pxToRem } = functions;
 
   return {
-    minWidth: pxToRem(36),
-    minHeight: pxToRem(36),
-    borderRadius: "8px",
+    background: (active) => {
+      if (active) {
+        return color === "default" ? white.button : sidenav.button;
+      }
+      return sidenav.button;
+    },
+    minWidth: pxToRem(32),
+    minHeight: pxToRem(32),
+    borderRadius: borderRadius.button,
     display: "grid",
     placeItems: "center",
-    background: active ? "rgba(0,229,255,0.12)" : "transparent",
-    transition: transitions.create("background", {
+    boxShadow: md,
+    transition: transitions.create("margin", {
       easing: transitions.easing.easeInOut,
       duration: transitions.duration.standard,
     }),
 
-    "& svg": {
-      color: active ? palette.info.main : palette.text.main,
+    [breakpoints.up("xl")]: {
+      background: () => {
+        let background;
+
+        if (!active) {
+          background = sidenav.button;
+        } else if (color === "default") {
+          background = info.main;
+        } else if (color === "warning") {
+          background = gradients.warning.main;
+        } else {
+          background = palette[color].main;
+        }
+
+        return background;
+      },
+    },
+
+    backgroundColor: active ? palette[color].main : transparent.main,
+    "& svg, svg g": {
+      fill: active ? white.main : palette[color].main,
     },
   };
 }
 
-const collapseIcon = ({ palette: { info, text } }, { active }) => ({
-  color: active ? info.main : text.main,
+const collapseIcon = ({ palette: { white, gradients } }, { active }) => ({
+  color: active ? white.main : gradients.dark.state,
 });
 
 function collapseText(theme, ownerState) {
@@ -73,12 +118,12 @@ function collapseText(theme, ownerState) {
   const { pxToRem } = functions;
 
   return {
-    marginLeft: pxToRem(10),
+    marginLeft: pxToRem(12.8),
 
     [breakpoints.up("xl")]: {
-      opacity: miniSidenav ? 0 : 1,
-      maxWidth: miniSidenav ? 0 : "100%",
-      marginLeft: miniSidenav ? 0 : pxToRem(10),
+      opacity: miniSidenav || miniSidenav ? 0 : 1,
+      maxWidth: miniSidenav || miniSidenav ? 0 : "100%",
+      marginLeft: miniSidenav || miniSidenav ? 0 : pxToRem(12.8),
       transition: transitions.create(["opacity", "margin"], {
         easing: transitions.easing.easeInOut,
         duration: transitions.duration.standard,

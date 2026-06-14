@@ -6,7 +6,7 @@ import DashboardNavbar from "examples/Navbars/DashboardNavbar";
 import VuiBox from "components/VuiBox";
 import VuiTypography from "components/VuiTypography";
 import VuiButton from "components/VuiButton";
-import { COLORS } from "theme/tokens";
+const AI_SCORE = "#9D5FFF";
 
 const PERIODS = ["1H", "4H", "1D", "1W"];
 
@@ -51,8 +51,8 @@ function AIScoresHistory() {
             <svg width="90%" height="260" viewBox="0 0 800 200" preserveAspectRatio="xMidYMid meet">
               <defs>
                 <linearGradient id="areaFill" x1="0" y1="0" x2="0" y2="1">
-                  <stop offset="0%" stopColor={COLORS.AI_SCORE} stopOpacity="0.3" />
-                  <stop offset="100%" stopColor={COLORS.AI_SCORE} stopOpacity="0" />
+                  <stop offset="0%" stopColor={AI_SCORE} stopOpacity="0.3" />
+                  <stop offset="100%" stopColor={AI_SCORE} stopOpacity="0" />
                 </linearGradient>
               </defs>
               {[0, 25, 50, 75, 100].map((v, i) => (
@@ -61,9 +61,9 @@ function AIScoresHistory() {
               ))}
               <path d={`${buildD(DATA_POINTS)} L${DATA_POINTS[DATA_POINTS.length - 1][0]},200 L50,200 Z`}
                 fill="url(#areaFill)" />
-              <path d={buildD(DATA_POINTS)} fill="none" stroke={COLORS.AI_SCORE} strokeWidth="2" strokeLinecap="round" />
+              <path d={buildD(DATA_POINTS)} fill="none" stroke={AI_SCORE} strokeWidth="2" strokeLinecap="round" />
               {DATA_POINTS.map(([cx, cy], i) => (
-                <circle key={i} cx={cx} cy={cy} r="3.5" fill={COLORS.AI_SCORE}
+                <circle key={i} cx={cx} cy={cy} r="3.5" fill={AI_SCORE}
                   stroke="#1a1f37" strokeWidth="2" />
               ))}
             </svg>

@@ -8,11 +8,12 @@ import VuiBox from "components/VuiBox";
 import VuiTypography from "components/VuiTypography";
 import VuiBadge from "components/VuiBadge";
 import VuiProgress from "components/VuiProgress";
-import { COLORS } from "theme/tokens";
+const AI_SCORE = "#9D5FFF";
+const AI_STALE = "#FFAB00";
 import useTradingStore from "stores/trading";
 
 const AGE_LABELS = { fresh: "新鲜", stale: "老化", expired: "过期" };
-const AGE_COLORS = { fresh: "#00FF94", stale: COLORS.AI_STALE, expired: "#FF4D6D" };
+const AGE_COLORS = { fresh: "#00FF94", stale: AI_STALE, expired: "#FF4D6D" };
 
 function getAgeStatus(ts) {
   if (!ts) return "stale";
@@ -42,7 +43,7 @@ function ScoreCard({ symbol, data }) {
       ...(isShadow ? {} : {
         "&::before": {
           content: '""', position: "absolute", inset: 0, borderRadius: "inherit", padding: "1px",
-          background: `linear-gradient(135deg, ${COLORS.AI_SCORE}66, ${COLORS.AI_SCORE}22, transparent)`,
+          background: `linear-gradient(135deg, ${AI_SCORE}66, ${AI_SCORE}22, transparent)`,
           mask: "linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0)",
           maskComposite: "exclude", WebkitMaskComposite: "xor", pointerEvents: "none",
         },
@@ -58,7 +59,7 @@ function ScoreCard({ symbol, data }) {
       </VuiBox>
       <VuiBox display="flex" alignItems="baseline" gap={1} mb={1}>
         <VuiTypography variant="h3" fontWeight="bold"
-          sx={{ color: COLORS.AI_SCORE, textShadow: isShadow ? "none" : `0 0 20px ${COLORS.AI_SCORE}66` }}>
+          sx={{ color: AI_SCORE, textShadow: isShadow ? "none" : `0 0 20px ${AI_SCORE}66` }}>
           {score != null ? score.toFixed(0) : "---"}
         </VuiTypography>
         {label && (
@@ -81,7 +82,7 @@ function ScoreCard({ symbol, data }) {
           <VuiTypography variant="caption" color="text" mb={0.5} display="block">关键驱动</VuiTypography>
           {drivers.map((d, i) => (
             <VuiTypography key={i} variant="caption" color="white" display="block"
-              sx={{ pl: 1, borderLeft: `2px solid ${COLORS.AI_SCORE}44`, mb: 0.25 }}>{d}</VuiTypography>
+              sx={{ pl: 1, borderLeft: `2px solid ${AI_SCORE}44`, mb: 0.25 }}>{d}</VuiTypography>
           ))}
         </VuiBox>
       )}

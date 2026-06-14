@@ -24,16 +24,16 @@
 export default {
   // Vision UI Colors
   background: {
-    default: "#070B14",
+    default: "#f8f9fa",
   },
 
   sidenav: {
-    button: "#0D2040",
+    button: "#1a1f37",
   },
 
   text: {
-    main: "#8899AA",
-    focus: "#E8ECF1",
+    main: "#a0aec0",
+    focus: "#ffffff",
   },
 
   transparent: {
@@ -46,92 +46,92 @@ export default {
   },
 
   brand: {
-    main: "#00E5FF",
-    focus: "#00B8D4",
+    main: "#0075ff",
+    focus: "#0075ff",
   },
 
   black: {
-    light: "#141E30",
-    main: "#070B14",
-    focus: "#0D1321",
+    light: "#141414",
+    main: "#000000",
+    focus: "#000000",
   },
 
   primary: {
-    main: "#00E5FF",
-    focus: "#4DEEFF",
+    main: "#4318ff",
+    focus: "#9f7aea",
   },
 
   secondary: {
-    main: "#0D1321",
-    focus: "#141E30",
+    main: "#0f1535",
+    focus: "#131538",
   },
 
   lightblue: {
-    main: "#00E5FF",
-    focus: "#00B8D4",
+    main: "#4299e1",
+    focus: "#4299e1",
   },
 
   orange: {
-    main: "#FFAB00",
-    focus: "#FFD740",
+    main: "#f6ad55",
+    focus: "#f6ad55",
   },
 
   grey: {
-    100: "#1A2332",
-    200: "#1F2A3A",
-    300: "#263548",
-    400: "#405570",
-    500: "#557799",
-    600: "#6B8DAA",
-    700: "#8899AA",
-    800: "#A0B0BB",
-    900: "#B8C5CC",
+    100: "#edf2f7",
+    200: "#e2e8f0",
+    300: "#cbd5e0",
+    400: "#a0aec0",
+    500: "#718096",
+    600: "#4a5568",
+    700: "#2d3748",
+    800: "#1a202a",
+    900: "#171923",
   },
 
   borderCol: {
-    main: "rgba(0,229,255,0.15)",
-    red: "#FF1744",
-    navbar: "rgba(0,229,255,0.08)",
+    main: "#56577a",
+    red: "#e31a1a",
+    navbar: "rgba(226, 232, 240, 0.3)",
   },
 
   // Other colors
   info: {
-    main: "#00E5FF",
-    focus: "#4DEEFF",
+    main: "#0075ff",
+    focus: "#3993fe",
     charts: {
-      100: "#00E5FF",
-      200: "#00B8D4",
-      300: "#0097B0",
-      400: "#00758C",
-      500: "#005566",
-      600: "#003844",
+      100: "#2d8cfc",
+      200: "#2370cc",
+      300: "#2370cc",
+      400: "#0f4a91",
+      500: "#073a78",
+      600: "#012654",
     },
   },
 
   success: {
-    main: "#00E676",
-    focus: "#4DFF9E",
+    main: "#01b574",
+    focus: "#35d28a",
   },
 
   warning: {
-    main: "#FFAB00",
-    focus: "#FFD740",
+    main: "#ffb547",
+    focus: "#ffcd75",
   },
 
   error: {
-    main: "#FF1744",
-    focus: "#FF5C77",
+    main: "#e31a1a",
+    focus: "#ee5d50",
   },
 
   light: {
-    main: "#1A2332",
-    focus: "#263548",
+    main: "#e9ecef",
+    focus: "#ebeff4",
   },
 
   dark: {
-    main: "#0D1321",
-    focus: "#070B14",
-    body: "#070B14",
+    main: "#344767",
+    focus: "#121241",
+    body: "#030c1d",
   },
 
   gradients: {
@@ -226,8 +226,8 @@ export default {
     },
 
     info: {
-      main: "#00E5FF",
-      state: "#00B8D4",
+      main: "#0075ff",
+      state: "#21d4fd",
     },
 
     success: {
@@ -419,11 +419,11 @@ export default {
   },
 
   inputColors: {
-    backgroundColor: "#0D1321",
-    borderColor: { main: "rgba(0,229,255,0.15)", focus: "rgba(0,229,255,0.35)" },
-    boxShadow: "#00E5FF",
-    error: "#FF1744",
-    success: "#00E676",
+    backgroundColor: "#0f1535",
+    borderColor: { main: "rgba(226, 232, 240, 0.3)", focus: "rgba(226, 232, 240, 0.6)" },
+    boxShadow: "#628fc2",
+    error: "#fd5c70",
+    success: "#66d432",
   },
 
   sliderColors: {
