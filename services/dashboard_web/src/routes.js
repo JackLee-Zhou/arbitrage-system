@@ -14,6 +14,8 @@ import StocksPlaceholder from "layouts/stocks/Placeholder";
 // ---- Tab: AI ---------------------------------------------------------------
 import AIScores from "layouts/ai/Scores";
 import AIScoresHistory from "layouts/ai/ScoresHistory";
+import AISentiment from "layouts/ai/Sentiment";
+import AIDecisions from "layouts/ai/Decisions";
 
 // ---- Tab: 系统 ------------------------------------------------------------
 import SystemNodes from "layouts/system/Nodes";
@@ -34,9 +36,10 @@ import { IoTrendingUp } from "react-icons/io5";
 
 const routes = [
   // ---- 🏠 概览 tab ---------------------------------------------------------
+  { type: "title", title: "🏠 概览", key: "overview-title" },
   {
     type: "collapse",
-    name: "概览",
+    name: "总览仪表盘",
     key: "overview",
     route: "/",
     icon: <IoHome size="15px" color="inherit" />,
@@ -101,6 +104,24 @@ const routes = [
     route: "/ai/scores/history",
     icon: <IoStatsChart size="15px" color="inherit" />,
     component: AIScoresHistory,
+    noCollapse: true,
+  },
+  {
+    type: "collapse",
+    name: "舆情看板",
+    key: "ai-sentiment",
+    route: "/ai/sentiment",
+    icon: <IoTrendingUp size="15px" color="inherit" />,
+    component: AISentiment,
+    noCollapse: true,
+  },
+  {
+    type: "collapse",
+    name: "决策溯源",
+    key: "ai-decisions",
+    route: "/ai/decisions/:id",
+    icon: <IoStatsChart size="15px" color="inherit" />,
+    component: AIDecisions,
     noCollapse: true,
   },
 
