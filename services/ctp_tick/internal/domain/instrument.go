@@ -12,16 +12,16 @@ import (
 
 // InstrumentMetadata 合约元数据（domain 层中间结构）
 type InstrumentMetadata struct {
-	Symbol           string  `json:"symbol"`             // "MA2509"
-	ProductID        string  `json:"product_id"`         // "MA"
-	Exchange         string  `json:"exchange"`           // "CZCE"
-	ProductNameCN    string  `json:"product_name_cn"`    // "甲醇"
-	ContractYear     int     `json:"contract_year"`      // 2025
-	ContractMonth    int     `json:"contract_month"`     // 9
-	Multiplier       float64 `json:"multiplier"`         // 10
-	PriceTick        float64 `json:"price_tick"`         // 1.0
-	LongMarginRatio  float64 `json:"long_margin_ratio"`  // 0.08
-	ShortMarginRatio float64 `json:"short_margin_ratio"` // 0.08
+	Symbol           string  `json:"symbol"`             // "MA2509",
+	ProductID        string  `json:"product_id"`         // "MA",
+	Exchange         string  `json:"exchange"`           // "CZCE",
+	ProductNameCN    string  `json:"product_name_cn"`    // "甲醇",
+	ContractYear     int     `json:"contract_year"`      // 2025,
+	ContractMonth    int     `json:"contract_month"`     // 9,
+	Multiplier       float64 `json:"multiplier"`         // 10,
+	PriceTick        float64 `json:"price_tick"`         // 1.0,
+	LongMarginRatio  float64 `json:"long_margin_ratio"`  // 0.08,
+	ShortMarginRatio float64 `json:"short_margin_ratio"` // 0.08,
 }
 
 // ============================================================
@@ -29,8 +29,8 @@ type InstrumentMetadata struct {
 // key=product_id（大小写敏感，用 mock 中的实际大小写）
 // ============================================================
 
-// ProductExchangeMap 品种所属交易所
-var ProductExchangeMap = map[string]string{
+// productExchangeMap 品种所属交易所（非导出，防止外部并发写入导致 data race）
+var productExchangeMap = map[string]string{
 	// 郑商所 CZCE
 	"MA": "CZCE", "TA": "CZCE", "FG": "CZCE", "SA": "CZCE",
 	"UR": "CZCE", "PF": "CZCE", "CF": "CZCE", "SR": "CZCE",
@@ -67,8 +67,8 @@ var ProductExchangeMap = map[string]string{
 	"si": "GFEX", "lc": "GFEX",
 }
 
-// ProductNameCNMap 品种中文名映射
-var ProductNameCNMap = map[string]string{
+// productNameCNMap 品种中文名映射（非导出）
+var productNameCNMap = map[string]string{
 	"MA": "甲醇", "TA": "PTA", "FG": "玻璃", "SA": "纯碱",
 	"UR": "尿素", "PF": "短纤", "CF": "棉花", "SR": "白糖",
 	"OI": "菜油", "RM": "菜粕", "ZC": "动力煤", "SM": "硅铁",
@@ -94,15 +94,19 @@ var ProductNameCNMap = map[string]string{
 	"IF": "沪深300", "IC": "中证500", "IH": "上证50", "IM": "中证1000",
 	"T": "十年国债", "TF": "五年国债", "TS": "两年国债",
 
+	"fb": "纤维板",
+	"wr": "线材",
+	"ss": "不锈钢",
 	"si": "工业硅", "lc": "碳酸锂",
+	"ME": "甲醇(旧)",
 }
 
 // ============================================================
 // 合约规格（从 CTP 文档查询的常见值）
 // ============================================================
 
-// ProductMultiplier 品种合约乘数（每手吨数/克数）
-var ProductMultiplier = map[string]float64{
+// productMultiplier 品种合约乘数，每手吨数/克数（非导出）
+var productMultiplier = map[string]float64{
 	"MA": 10, "TA": 5, "FG": 20, "SA": 20,
 	"UR": 20, "PF": 5, "CF": 5, "SR": 10,
 	"OI": 10, "RM": 10,
@@ -123,10 +127,36 @@ var ProductMultiplier = map[string]float64{
 	"IF": 300, "IC": 200, "IH": 300, "IM": 200,
 
 	"si": 5, "lc": 1,
+	"ZC": 100,
+	"SM": 5,
+	"SF": 5,
+	"AP": 10,
+	"CJ": 5,
+	"CY": 5,
+	"JR": 20,
+	"LR": 20,
+	"ME": 10,
+	"RI": 20,
+	"WH": 20,
+	"PM": 50,
+	"b": 10,
+	"c": 10,
+	"cs": 10,
+	"jd": 10,
+	"lh": 16,
+	"rr": 10,
+	"fb": 10,
+	"ag": 15,
+	"au": 1000,
+	"wr": 10,
+	"ss": 5,
+	"T": 10000,
+	"TF": 10000,
+	"TS": 20000,
 }
 
-// ProductPriceTick 品种最小变动价位
-var ProductPriceTick = map[string]float64{
+// productPriceTick 品种最小变动价位（非导出）
+var productPriceTick = map[string]float64{
 	"MA": 1, "TA": 2, "FG": 1, "SA": 1,
 	"UR": 1, "PF": 2, "CF": 5, "SR": 1,
 	"OI": 1, "RM": 1,
@@ -147,10 +177,36 @@ var ProductPriceTick = map[string]float64{
 	"IF": 0.2, "IC": 0.2, "IH": 0.2, "IM": 0.2,
 
 	"si": 5, "lc": 50,
+	"ZC": 0.2,
+	"SM": 2,
+	"SF": 2,
+	"AP": 1,
+	"CJ": 5,
+	"CY": 5,
+	"JR": 1,
+	"LR": 1,
+	"ME": 1,
+	"RI": 1,
+	"WH": 1,
+	"PM": 1,
+	"b": 1,
+	"c": 1,
+	"cs": 1,
+	"jd": 1,
+	"lh": 5,
+	"rr": 1,
+	"fb": 0.05,
+	"ag": 1,
+	"au": 0.02,
+	"wr": 1,
+	"ss": 5,
+	"T": 0.005,
+	"TF": 0.005,
+	"TS": 0.005,
 }
 
-// ProductMarginRatio 品种默认保证金率
-var ProductMarginRatio = map[string]float64{
+// productMarginRatio 品种默认保证金率（非导出）
+var productMarginRatio = map[string]float64{
 	"MA": 0.08, "TA": 0.07, "FG": 0.09, "SA": 0.09,
 	"UR": 0.08, "PF": 0.08, "CF": 0.07, "SR": 0.07,
 	"OI": 0.08, "RM": 0.08,
@@ -167,6 +223,32 @@ var ProductMarginRatio = map[string]float64{
 	"sp": 0.08,
 
 	"si": 0.09, "lc": 0.12,
+	"ZC": 0.12,
+	"SM": 0.08,
+	"SF": 0.08,
+	"AP": 0.09,
+	"CJ": 0.09,
+	"CY": 0.07,
+	"JR": 0.08,
+	"LR": 0.08,
+	"ME": 0.08,
+	"RI": 0.08,
+	"WH": 0.08,
+	"PM": 0.08,
+	"b": 0.07,
+	"c": 0.07,
+	"cs": 0.07,
+	"jd": 0.08,
+	"lh": 0.1,
+	"rr": 0.07,
+	"fb": 0.1,
+	"ag": 0.1,
+	"au": 0.08,
+	"wr": 0.08,
+	"ss": 0.08,
+	"T": 0.02,
+	"TF": 0.015,
+	"TS": 0.01,
 }
 
 // ============================================================
@@ -195,23 +277,23 @@ func DeriveInstrumentInfo(symbol string) InstrumentMetadata {
 	info.ContractMonth = month
 
 	// 交易所
-	if ex, ok := ProductExchangeMap[info.ProductID]; ok {
+	if ex, ok := productExchangeMap[info.ProductID]; ok {
 		info.Exchange = ex
 	}
 
 	// 中文名
-	if name, ok := ProductNameCNMap[info.ProductID]; ok {
+	if name, ok := productNameCNMap[info.ProductID]; ok {
 		info.ProductNameCN = name
 	}
 
 	// 合约规格
-	if m, ok := ProductMultiplier[info.ProductID]; ok {
+	if m, ok := productMultiplier[info.ProductID]; ok {
 		info.Multiplier = m
 	}
-	if pt, ok := ProductPriceTick[info.ProductID]; ok {
+	if pt, ok := productPriceTick[info.ProductID]; ok {
 		info.PriceTick = pt
 	}
-	if mr, ok := ProductMarginRatio[info.ProductID]; ok {
+	if mr, ok := productMarginRatio[info.ProductID]; ok {
 		info.LongMarginRatio = mr
 		info.ShortMarginRatio = mr
 	}

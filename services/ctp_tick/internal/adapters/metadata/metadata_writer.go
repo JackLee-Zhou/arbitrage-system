@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"log"
 	"net/http"
+	"strconv"
 	"time"
 
 	pkgredis "github.com/arbitrage-system/pkg/redis"
@@ -58,17 +59,24 @@ func (w *Writer) WriteAll(ctx context.Context, instruments []domain.InstrumentMe
 		return nil
 	}
 
-	// 写 Redis
+	// 写 Redis（关键路径，失败向上传播）
 	if err := w.writeRedis(ctx, instruments); err != nil {
 		return fmt.Errorf("write instruments to redis: %w", err)
 	}
 
-	// 写 InfluxDB
+	// 写 InfluxDB（best-effort：InfluxDB 是历史记录，失败不影响业务）
 	if err := w.writeInfluxDB(ctx, instruments); err != nil {
-		return fmt.Errorf("write instruments to influxdb: %w", err)
+		log.Printf("[metadata] WARNING: influxdb write failed (non-fatal): %v", err)
+		// 不返回 error — Redis 已成功，InfluxDB 不应阻断启动流程
 	}
 
-	log.Printf("[metadata] wrote %d instruments to redis + influxdb", len(instruments))
+	log.Printf("[metadata] wrote %d instruments to redis (influxdb: %v)", len(instruments),
+		func() string {
+			if w.influxURL == "" {
+				return "skipped"
+			}
+			return "attempted"
+		}())
 	return nil
 }
 
@@ -220,6 +228,8 @@ func escapeInfluxField(s string) string {
 }
 
 // formatInfluxFloat 将 float64 格式化为 InfluxDB 兼容浮点值
+// 使用 'f' 格式确保始终包含小数点，避免 InfluxDB 同一字段在
+// 不同行中出现整型/浮点型混用而导致 field type conflict（HTTP 400）
 func formatInfluxFloat(v float64) string {
-	return fmt.Sprintf("%g", v)
+	return strconv.FormatFloat(v, 'f', -1, 64)
 }

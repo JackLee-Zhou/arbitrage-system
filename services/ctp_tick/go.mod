@@ -16,3 +16,7 @@ replace (
 	github.com/arbitrage-system/pkg/redis => ../../pkg/redis
 	github.com/arbitrage-system/pkg/registry => ../../pkg/registry
 )
+
+require github.com/arbitrage-system/pkg/config v0.0.0
+
+replace github.com/arbitrage-system/pkg/config => ../../pkg/config

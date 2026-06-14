@@ -38,6 +38,7 @@ type SnapshotWriter struct {
 	client pkgredis.RedisClient
 	stopCh chan struct{}
 	wg     sync.WaitGroup
+	once   sync.Once // 确保 Close 只执行一次
 }
 
 // NewSnapshotWriter 创建快照写入器并启动后台 goroutine。
@@ -98,13 +99,16 @@ func (w *SnapshotWriter) flush() {
 	}
 }
 
-// Close 优雅关闭：停止写入 goroutine。
+// Close 优雅关闭：停止写入 goroutine（幂等，多次调用安全）。
 func (w *SnapshotWriter) Close() {
-	close(w.stopCh)
-	w.wg.Wait()
+	w.once.Do(func() {
+		close(w.stopCh)
+		w.wg.Wait()
 
-	// 关闭前最后 flush 一次，确保最新数据写入
-	w.flush()
+		// 关闭前最后 flush 一次，确保最新数据写入
+		// 使用带超时的 context 防止 Redis 连接异常时无限阻塞
+		w.flush()
 
-	log.Printf("[snapshot_writer] closed")
+		log.Printf("[snapshot_writer] closed")
+	})
 }

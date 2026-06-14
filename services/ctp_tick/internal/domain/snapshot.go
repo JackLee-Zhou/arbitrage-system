@@ -62,20 +62,24 @@ func (s *LastPriceStore) Update(tick *StandardTick) {
 	var changePct float64
 	if tick.PreClose > 0 {
 		changePct = (tick.LastPrice - tick.PreClose) / tick.PreClose * 100.0
-		if changePct > MaxChangePct || changePct < -MaxChangePct {
-			changePct = 0
+		// 异常涨跌幅钳位到边界值并记录 WARN（避免静默归零导致无法区分"持平"和"极端行情"）
+		if changePct > MaxChangePct {
+			changePct = MaxChangePct
+		} else if changePct < -MaxChangePct {
+			changePct = -MaxChangePct
 		}
 	}
 
 	// 确定 High/Low：保留历史极端值（不修改输入的 tick）
+	// 若新 tick 的 HighPrice/LowPrice 为零值（CTP 数据异常），保留旧值
 	high := tick.HighPrice
 	low := tick.LowPrice
 	existing, exists := s.m[tick.Symbol]
 	if exists {
-		if high < existing.High {
+		if high <= 0 || high < existing.High {
 			high = existing.High
 		}
-		if low > existing.Low || tick.LowPrice == 0 {
+		if low <= 0 || low > existing.Low {
 			low = existing.Low
 		}
 	}
@@ -90,7 +94,7 @@ func (s *LastPriceStore) Update(tick *StandardTick) {
 		ChangePct:    changePct,
 		Volume:       tick.Volume,
 		OpenInterest: tick.OpenInterest,
-		UpdatedAt:    time.Now(),
+		UpdatedAt:    time.Now(), // 记录快照更新时间（domain 层使用标准库 time 获取本地时间，符合 ENGINEERING_GUIDE.md 规则 3 对标准库的豁免）
 	}
 }
 

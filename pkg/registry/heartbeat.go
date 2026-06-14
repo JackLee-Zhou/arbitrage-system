@@ -42,17 +42,3 @@ func RegisterAndKeepAlive(ctx context.Context, client pkgredis.RedisClient, info
 	return cancelFn, nil
 }
 
-// KeepAlive 为已注册的 *Registry 创建一个 cancel 风格的封装。
-//
-// 适用于已通过 Register 创建 Registry，但希望以 cancel() 风格统一管理的场景。
-//
-//	reg, err := registry.Register(ctx, client, info)
-//	cancel := registry.KeepAlive(reg)
-//	defer cancel()
-func KeepAlive(reg *Registry) func() {
-	return func() {
-		ctx, cancel := context.WithTimeout(context.Background(), DefaultShutdownTimeout)
-		defer cancel()
-		_ = reg.Shutdown(ctx)
-	}
-}

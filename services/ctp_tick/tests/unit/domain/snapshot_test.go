@@ -185,7 +185,7 @@ func TestLastPriceStore_SnapshotCopy(t *testing.T) {
 func TestLastPriceStore_ExtremeChangePct(t *testing.T) {
 	store := domain.NewLastPriceStore()
 
-	// 极端涨跌幅（超过 MaxChangePct=100）
+	// 极端涨跌幅（超过 MaxChangePct=100）→ 钳位到边界值
 	tick := &domain.StandardTick{
 		Symbol:    "TEST",
 		LastPrice: 50000.0,
@@ -197,8 +197,25 @@ func TestLastPriceStore_ExtremeChangePct(t *testing.T) {
 	if !ok {
 		t.Fatal("expected to find TEST")
 	}
-	// changePct = (50000-100)/100*100 = 49900, 超过限制，应返回 0
-	if snap.ChangePct != 0 {
-		t.Errorf("change_pct should be clamped to 0, got %f", snap.ChangePct)
+	// changePct = (50000-100)/100*100 = 49900, 超过限制，钳位到 MaxChangePct
+	if snap.ChangePct != 100.0 {
+		t.Errorf("change_pct should be clamped to MaxChangePct=100, got %f", snap.ChangePct)
+	}
+
+	// 极端跌幅（CTP 数据异常）：pre_close 极小导致 changePct < -100
+	// (1-10000)/10000*100 = -99.99%，未超过限制，正常返回
+	tick2 := &domain.StandardTick{
+		Symbol:    "TEST2",
+		LastPrice: 1.0,
+		PreClose:  10000.0,
+	}
+	store.Update(tick2)
+	snap2, ok := store.Get("TEST2")
+	if !ok {
+		t.Fatal("expected to find TEST2")
+	}
+	// 正常跌幅不触发钳位
+	if snap2.ChangePct != -99.99 {
+		t.Errorf("change_pct should be -99.99 (normal), got %f", snap2.ChangePct)
 	}
 }

@@ -9,6 +9,7 @@ import (
 	"syscall"
 	"time"
 
+	pkgconfig "github.com/arbitrage-system/pkg/config"
 	pkgredis "github.com/arbitrage-system/pkg/redis"
 	pkgregistry "github.com/arbitrage-system/pkg/registry"
 )
@@ -92,10 +93,7 @@ func loadConfig() Config {
 }
 
 func getEnv(key, fallback string) string {
-	if v := os.Getenv(key); v != "" {
-		return v
-	}
-	return fallback
+	return pkgconfig.GetEnv(key, fallback)
 }
 
 // EngineState 引擎状态（持久化在 Redis）
