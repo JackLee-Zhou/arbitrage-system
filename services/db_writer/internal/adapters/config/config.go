@@ -21,6 +21,21 @@ type Config struct {
 	HealthPort      int           // DB_WRITER_HEALTH_PORT, default 8081
 	DingtalkWebhook string        // DB_WRITER_DINGTALK_WEBHOOK
 	Streams         []string      // 消费的 stream 列表
+
+	// 超时和并发配置（全部通过环境变量配置，无硬编码）
+	XReadBlockMs        int64         // DB_WRITER_XREAD_BLOCK_MS, default 2000
+	XReadBatchSize      int64         // DB_WRITER_XREAD_BATCH_SIZE, default 100
+	InfluxWriteTimeout  time.Duration // DB_WRITER_INFLUX_WRITE_TIMEOUT, default 10s
+	DLQWriteTimeout     time.Duration // DB_WRITER_DLQ_WRITE_TIMEOUT, default 5s
+	DLQConcurrency      int           // DB_WRITER_DLQ_CONCURRENCY, default 5
+	ShutdownTimeout     time.Duration // DB_WRITER_SHUTDOWN_TIMEOUT, default 30s
+	ConsumerStopTimeout time.Duration // DB_WRITER_CONSUMER_STOP_TIMEOUT, default 10s
+	DLQMonitorInterval  time.Duration // DB_WRITER_DLQ_MONITOR_INTERVAL, default 30s
+	HTTPReadTimeout     time.Duration // DB_WRITER_HTTP_READ_TIMEOUT, default 10s
+	HTTPWriteTimeout    time.Duration // DB_WRITER_HTTP_WRITE_TIMEOUT, default 10s
+	HTTPIdleTimeout     time.Duration // DB_WRITER_HTTP_IDLE_TIMEOUT, default 120s
+	RedisPingTimeout    time.Duration // DB_WRITER_REDIS_PING_TIMEOUT, default 3s
+	InfluxPingTimeout   time.Duration // DB_WRITER_INFLUX_PING_TIMEOUT, default 5s
 }
 
 // DefaultStreams 默认消费的 stream 列表
@@ -36,17 +51,30 @@ var DefaultStreams = []string{
 // Load 从环境变量加载配置
 func Load() Config {
 	return Config{
-		ServiceName:     getEnv("DB_WRITER_SERVICE_NAME", "db_writer"),
-		RedisAddr:       getEnv("DB_WRITER_REDIS_ADDR", "redis:6379"),
-		InfluxDBURL:     getEnv("DB_WRITER_INFLUXDB_URL", "http://influxdb:8086"),
-		InfluxDBToken:   getEnv("DB_WRITER_INFLUXDB_TOKEN", ""),
-		InfluxDBOrg:     getEnv("DB_WRITER_INFLUXDB_ORG", "arbitrage"),
-		BatchSize:       getEnvInt("DB_WRITER_BATCH_SIZE", 100),
-		BatchInterval:   getEnvDuration("DB_WRITER_BATCH_INTERVAL", 1*time.Second),
-		MaxRetries:      getEnvInt("DB_WRITER_MAX_RETRIES", 3),
-		HealthPort:      getEnvInt("DB_WRITER_HEALTH_PORT", 8081),
-		DingtalkWebhook: getEnv("DB_WRITER_DINGTALK_WEBHOOK", ""),
-		Streams:         parseStreams(getEnv("DB_WRITER_STREAMS", "")),
+		ServiceName:         getEnv("DB_WRITER_SERVICE_NAME", "db_writer"),
+		RedisAddr:           getEnv("DB_WRITER_REDIS_ADDR", "redis:6379"),
+		InfluxDBURL:         getEnv("DB_WRITER_INFLUXDB_URL", "http://influxdb:8086"),
+		InfluxDBToken:       getEnv("DB_WRITER_INFLUXDB_TOKEN", ""),
+		InfluxDBOrg:         getEnv("DB_WRITER_INFLUXDB_ORG", "arbitrage"),
+		BatchSize:           getEnvInt("DB_WRITER_BATCH_SIZE", 100),
+		BatchInterval:       getEnvDuration("DB_WRITER_BATCH_INTERVAL", 1*time.Second),
+		MaxRetries:          getEnvInt("DB_WRITER_MAX_RETRIES", 3),
+		HealthPort:          getEnvInt("DB_WRITER_HEALTH_PORT", 8081),
+		DingtalkWebhook:     getEnv("DB_WRITER_DINGTALK_WEBHOOK", ""),
+		Streams:             parseStreams(getEnv("DB_WRITER_STREAMS", "")),
+		XReadBlockMs:        getEnvInt64("DB_WRITER_XREAD_BLOCK_MS", 2000),
+		XReadBatchSize:      getEnvInt64("DB_WRITER_XREAD_BATCH_SIZE", 100),
+		InfluxWriteTimeout:  getEnvDuration("DB_WRITER_INFLUX_WRITE_TIMEOUT", 10*time.Second),
+		DLQWriteTimeout:     getEnvDuration("DB_WRITER_DLQ_WRITE_TIMEOUT", 5*time.Second),
+		DLQConcurrency:      getEnvInt("DB_WRITER_DLQ_CONCURRENCY", 5),
+		ShutdownTimeout:     getEnvDuration("DB_WRITER_SHUTDOWN_TIMEOUT", 30*time.Second),
+		ConsumerStopTimeout: getEnvDuration("DB_WRITER_CONSUMER_STOP_TIMEOUT", 10*time.Second),
+		DLQMonitorInterval:  getEnvDuration("DB_WRITER_DLQ_MONITOR_INTERVAL", 30*time.Second),
+		HTTPReadTimeout:     getEnvDuration("DB_WRITER_HTTP_READ_TIMEOUT", 10*time.Second),
+		HTTPWriteTimeout:    getEnvDuration("DB_WRITER_HTTP_WRITE_TIMEOUT", 10*time.Second),
+		HTTPIdleTimeout:     getEnvDuration("DB_WRITER_HTTP_IDLE_TIMEOUT", 120*time.Second),
+		RedisPingTimeout:    getEnvDuration("DB_WRITER_REDIS_PING_TIMEOUT", 3*time.Second),
+		InfluxPingTimeout:   getEnvDuration("DB_WRITER_INFLUX_PING_TIMEOUT", 5*time.Second),
 	}
 }
 
@@ -117,6 +145,16 @@ func getEnv(key, fallback string) string {
 func getEnvInt(key string, fallback int) int {
 	if v := os.Getenv(key); v != "" {
 		if n, err := strconv.Atoi(v); err == nil {
+			return n
+		}
+	}
+	return fallback
+}
+
+// getEnvInt64 读取 int64 环境变量
+func getEnvInt64(key string, fallback int64) int64 {
+	if v := os.Getenv(key); v != "" {
+		if n, err := strconv.ParseInt(v, 10, 64); err == nil {
 			return n
 		}
 	}

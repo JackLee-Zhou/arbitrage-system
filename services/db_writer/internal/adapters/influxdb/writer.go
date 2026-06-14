@@ -5,40 +5,47 @@ import (
 	"context"
 	"fmt"
 	"log"
+	"sync"
 	"time"
 
 	influxdb2 "github.com/influxdata/influxdb-client-go/v2"
+	"github.com/influxdata/influxdb-client-go/v2/api"
 
 	"github.com/arbitrage-system/db_writer/internal/domain"
 )
 
 // Writer InfluxDB 批量写入器
 type Writer struct {
-	client influxdb2.Client
-	org    string
-	policy domain.RetryPolicy
+	client       influxdb2.Client
+	org          string
+	policy       domain.RetryPolicy
+	writeTimeout time.Duration
+	writeAPIs    map[string]api.WriteAPIBlocking
+	mu           sync.RWMutex
 }
 
 // NewWriter 创建 InfluxDB 写入器
-func NewWriter(url, token, org string, policy domain.RetryPolicy) (*Writer, error) {
+func NewWriter(url, token, org string, policy domain.RetryPolicy, writeTimeout time.Duration) (*Writer, error) {
 	client := influxdb2.NewClient(url, token)
 
 	// 验证连接
-	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
-	defer cancel()
-	_, err := client.Health(ctx)
+	healthCtx, healthCancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer healthCancel()
+	_, err := client.Health(healthCtx)
 	if err != nil {
 		client.Close()
 		return nil, fmt.Errorf("influxdb health check failed: %w", err)
 	}
 
 	w := &Writer{
-		client: client,
-		org:    org,
-		policy: policy,
+		client:       client,
+		org:          org,
+		policy:       policy,
+		writeTimeout: writeTimeout,
+		writeAPIs:    make(map[string]api.WriteAPIBlocking),
 	}
 
-	log.Printf("[influxdb] writer created: url=%s org=%s", url, org)
+	log.Printf("[influxdb] writer created: url=%s org=%s write_timeout=%s", url, org, writeTimeout)
 	return w, nil
 }
 
@@ -81,10 +88,39 @@ func (w *Writer) WriteBatch(ctx context.Context, bucket string, records []string
 }
 
 // writeBatchOnce 执行一次批量写入
-// 使用 WriteAPIBlocking 同步写入所有记录
+// 使用 WriteAPIBlocking 同步写入所有记录（缓存 WriteAPI 实例避免重复创建）
 func (w *Writer) writeBatchOnce(ctx context.Context, bucket string, records []string) error {
-	writeAPI := w.client.WriteAPIBlocking(w.org, bucket)
+	// 获取或缓存 WriteAPIBlocking 实例
+	writeAPI := w.getOrCreateWriteAPI(bucket)
+
+	// 应用写入超时
+	if w.writeTimeout > 0 {
+		var cancel context.CancelFunc
+		ctx, cancel = context.WithTimeout(ctx, w.writeTimeout)
+		defer cancel()
+	}
+
 	return writeAPI.WriteRecord(ctx, records...)
+}
+
+// getOrCreateWriteAPI 获取缓存的 WriteAPIBlocking，不存在则创建
+func (w *Writer) getOrCreateWriteAPI(bucket string) api.WriteAPIBlocking {
+	w.mu.RLock()
+	writeAPI, ok := w.writeAPIs[bucket]
+	w.mu.RUnlock()
+	if ok {
+		return writeAPI
+	}
+
+	w.mu.Lock()
+	defer w.mu.Unlock()
+	// Double-check
+	writeAPI, ok = w.writeAPIs[bucket]
+	if !ok {
+		writeAPI = w.client.WriteAPIBlocking(w.org, bucket)
+		w.writeAPIs[bucket] = writeAPI
+	}
+	return writeAPI
 }
 
 // Ping 检查 InfluxDB 连通性
@@ -93,8 +129,11 @@ func (w *Writer) Ping(ctx context.Context) error {
 	return err
 }
 
-// Close 关闭 InfluxDB 连接
+// Close 关闭 InfluxDB 连接和缓存的 WriteAPI
 func (w *Writer) Close() {
+	w.mu.Lock()
+	w.writeAPIs = nil
+	w.mu.Unlock()
 	w.client.Close()
 	log.Println("[influxdb] client closed")
 }

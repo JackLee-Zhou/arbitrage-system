@@ -8,6 +8,7 @@ import (
 	"net/http"
 	"os"
 	"os/signal"
+	"sync"
 	"sync/atomic"
 	"syscall"
 	"time"
@@ -27,16 +28,7 @@ import (
 // 常量
 // ============================================================
 
-const (
-	serviceVersion     = "1.0.0"
-	dlqMonitorInterval = 30 * time.Second
-	httpReadTimeout    = 10 * time.Second
-	httpWriteTimeout   = 10 * time.Second
-	httpIdleTimeout    = 120 * time.Second
-	shutdownTimeout    = 15 * time.Second
-	redisPingTimeout   = 3 * time.Second
-	influxPingTimeout  = 5 * time.Second
-)
+const serviceVersion = "1.0.0"
 
 func main() {
 	log.SetFlags(log.LstdFlags | log.Lshortfile)
@@ -60,7 +52,7 @@ func main() {
 		InitialBackoff:    domain.InitialBackoff,
 		BackoffMultiplier: domain.BackoffMultiplier,
 	}
-	influxWriter, err := influxdb.NewWriter(cfg.InfluxDBURL, cfg.InfluxDBToken, cfg.InfluxDBOrg, retryPolicy)
+	influxWriter, err := influxdb.NewWriter(cfg.InfluxDBURL, cfg.InfluxDBToken, cfg.InfluxDBOrg, retryPolicy, cfg.InfluxWriteTimeout)
 	if err != nil {
 		log.Fatalf("[db_writer] failed to create InfluxDB writer: %v", err)
 	}
@@ -123,6 +115,7 @@ func main() {
 		consumer := redisadapter.NewStreamConsumer(
 			redisClient, stream, batchRule, influxWriter,
 			writeTotal, writeErrors, writeLatency,
+			cfg.XReadBlockMs, cfg.XReadBatchSize, cfg.DLQWriteTimeout, cfg.DLQConcurrency,
 		)
 		consumers = append(consumers, consumerInfo{
 			consumer: consumer,
@@ -136,7 +129,7 @@ func main() {
 
 	// ---- Step 8: 启动死信队列监控 ----
 	alerter := alert.NewDingtalkAlerter(cfg.DingtalkWebhook)
-	go monitorDLQ(ctx, redisClient, alerter, metrics, config.AllBuckets())
+	go monitorDLQ(ctx, redisClient, alerter, metrics, config.AllBuckets(), cfg.DLQMonitorInterval)
 
 	// ---- Step 9: 启动 HTTP 服务 ----
 	healthHandler := &api.HealthHandler{
@@ -145,12 +138,12 @@ func main() {
 		StartTime:   startTime,
 		Funcs: api.HealthCheckFuncs{
 			RedisPing: func(ctx context.Context) error {
-				pingCtx, pingCancel := context.WithTimeout(ctx, redisPingTimeout)
+				pingCtx, pingCancel := context.WithTimeout(ctx, cfg.RedisPingTimeout)
 				defer pingCancel()
 				return redisClient.Ping(pingCtx)
 			},
 			InfluxDBPing: func(ctx context.Context) error {
-				pingCtx, pingCancel := context.WithTimeout(ctx, influxPingTimeout)
+				pingCtx, pingCancel := context.WithTimeout(ctx, cfg.InfluxPingTimeout)
 				defer pingCancel()
 				return influxWriter.Ping(pingCtx)
 			},
@@ -164,9 +157,9 @@ func main() {
 	httpServer := &http.Server{
 		Addr:         fmt.Sprintf(":%d", cfg.HealthPort),
 		Handler:      mux,
-		ReadTimeout:  httpReadTimeout,
-		WriteTimeout: httpWriteTimeout,
-		IdleTimeout:  httpIdleTimeout,
+		ReadTimeout:  cfg.HTTPReadTimeout,
+		WriteTimeout: cfg.HTTPWriteTimeout,
+		IdleTimeout:  cfg.HTTPIdleTimeout,
 	}
 	go func() {
 		log.Printf("[db_writer] health server on :%d", cfg.HealthPort)
@@ -186,17 +179,27 @@ func main() {
 	}
 
 	// ---- Step 11: 优雅关停 ----
-	shutdownCtx, shutdownCancel := context.WithTimeout(context.Background(), shutdownTimeout)
+	shutdownCtx, shutdownCancel := context.WithTimeout(context.Background(), cfg.ShutdownTimeout)
 	defer shutdownCancel()
 
-	// 停止所有消费者（flush 残余数据）
-	log.Println("[db_writer] stopping consumers...")
-	for _, ci := range consumers {
-		ci.consumer.Stop()
-	}
-
-	// 取消全局 context（通知所有后台 goroutine）
+	// 先取消全局 context（通知所有后台 goroutine）
 	cancel()
+
+	// 停止所有消费者（并行，每个 consumer 有独立超时）
+	log.Println("[db_writer] stopping consumers...")
+	var wg sync.WaitGroup
+	for _, ci := range consumers {
+		wg.Add(1)
+		go func(c *redisadapter.StreamConsumer) {
+			defer wg.Done()
+			stopCtx, stopCancel := context.WithTimeout(shutdownCtx, cfg.ConsumerStopTimeout)
+			defer stopCancel()
+			if err := c.Stop(stopCtx); err != nil {
+				log.Printf("[db_writer] consumer stop error: %v", err)
+			}
+		}(ci.consumer)
+	}
+	wg.Wait()
 
 	// 注销服务注册
 	if reg != nil {
@@ -222,8 +225,8 @@ func main() {
 
 // monitorDLQ 定期检查所有死信队列大小
 // 超过阈值则推钉钉告警，同时更新指标
-func monitorDLQ(ctx context.Context, redisClient pkgredis.RedisClient, alerter *alert.Alerter, metrics *api.Metrics, buckets []string) {
-	ticker := time.NewTicker(dlqMonitorInterval)
+func monitorDLQ(ctx context.Context, redisClient pkgredis.RedisClient, alerter *alert.Alerter, metrics *api.Metrics, buckets []string, interval time.Duration) {
+	ticker := time.NewTicker(interval)
 	defer ticker.Stop()
 
 	log.Println("[dlq_monitor] started")

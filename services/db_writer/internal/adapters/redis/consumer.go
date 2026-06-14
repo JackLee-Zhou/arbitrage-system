@@ -24,12 +24,6 @@ import (
 // ConsumerGroupName 消费组名称（导出供 main.go 使用）
 const ConsumerGroupName = "db_writer"
 
-// xReadBlockMs XREADGROUP 阻塞等待毫秒数
-const xReadBlockMs int64 = 2000
-
-// xReadBatchSize XREADGROUP 每次读取最大条数
-const xReadBatchSize int64 = 100
-
 // maxDLQRetries 写入 DLQ 时记录的已重试次数
 const maxDLQRetries = 3
 
@@ -65,6 +59,12 @@ type StreamConsumer struct {
 
 	stopCh chan struct{}
 	doneCh chan struct{}
+
+	// 配置化字段（来自 config）
+	xReadBlockMs    int64
+	xReadBatchSize  int64
+	dlqWriteTimeout time.Duration
+	dlqConcurrency  int
 }
 
 // NewStreamConsumer 创建 Stream 消费者
@@ -76,6 +76,10 @@ func NewStreamConsumer(
 	writeTotal *atomic.Int64,
 	writeErrors *atomic.Int64,
 	writeLatencyMs *atomic.Int64,
+	xReadBlockMs int64,
+	xReadBatchSize int64,
+	dlqWriteTimeout time.Duration,
+	dlqConcurrency int,
 ) *StreamConsumer {
 	hostname, _ := os.Hostname()
 	if hostname == "" {
@@ -83,20 +87,24 @@ func NewStreamConsumer(
 	}
 
 	return &StreamConsumer{
-		client:         client,
-		stream:         stream,
-		bucket:         config.StreamToBucket(stream),
-		groupName:      ConsumerGroupName,
-		consumerName:   ConsumerGroupName + "_" + hostname,
-		batchRule:      batchRule,
-		influxWriter:   influxWriter,
-		buffer:         make([]bufferedMessage, 0, batchRule.MaxSize),
-		lastFlush:      time.Now(),
-		writeTotal:     writeTotal,
-		writeErrors:    writeErrors,
-		writeLatencyMs: writeLatencyMs,
-		stopCh:         make(chan struct{}),
-		doneCh:         make(chan struct{}),
+		client:          client,
+		stream:          stream,
+		bucket:          config.StreamToBucket(stream),
+		groupName:       ConsumerGroupName,
+		consumerName:    ConsumerGroupName + "_" + hostname,
+		batchRule:       batchRule,
+		influxWriter:    influxWriter,
+		buffer:          make([]bufferedMessage, 0, batchRule.MaxSize),
+		lastFlush:       time.Now(),
+		writeTotal:      writeTotal,
+		writeErrors:     writeErrors,
+		writeLatencyMs:  writeLatencyMs,
+		stopCh:          make(chan struct{}),
+		doneCh:          make(chan struct{}),
+		xReadBlockMs:    xReadBlockMs,
+		xReadBatchSize:  xReadBatchSize,
+		dlqWriteTimeout: dlqWriteTimeout,
+		dlqConcurrency:  dlqConcurrency,
 	}
 }
 
@@ -144,9 +152,15 @@ func (c *StreamConsumer) Consume(ctx context.Context) {
 }
 
 // Stop 发送停止信号，等待消费循环退出
-func (c *StreamConsumer) Stop() {
+// ctx 控制等待超时，超时返回 ctx.Err()
+func (c *StreamConsumer) Stop(ctx context.Context) error {
 	close(c.stopCh)
-	<-c.doneCh
+	select {
+	case <-c.doneCh:
+		return nil
+	case <-ctx.Done():
+		return ctx.Err()
+	}
 }
 
 // ============================================================
@@ -160,8 +174,8 @@ func (c *StreamConsumer) readAndProcess(ctx context.Context) {
 		Consumer: c.consumerName,
 		Streams:  []string{c.stream},
 		IDs:      []string{">"},
-		Block:    xReadBlockMs,
-		Count:    xReadBatchSize,
+		Block:    c.xReadBlockMs,
+		Count:    c.xReadBatchSize,
 	})
 	if err != nil {
 		if err != context.DeadlineExceeded && err != context.Canceled {
@@ -244,8 +258,8 @@ func (c *StreamConsumer) flushBuffer(ctx context.Context) {
 
 	// 释放锁后执行写入（避免长时间持有锁）
 	c.mu.Unlock()
+	defer func() { c.mu.Lock() }()
 	c.flushRecords(ctx, batch)
-	c.mu.Lock()
 }
 
 // flushRecords 执行实际的 InfluxDB 写入
@@ -294,23 +308,44 @@ func (c *StreamConsumer) flushRecords(ctx context.Context, batch []bufferedMessa
 }
 
 // writeToDLQ 写入死信队列，返回首个写入错误（若有）
+// 使用并发写入，并发数由 dlqConcurrency 控制
 func (c *StreamConsumer) writeToDLQ(ctx context.Context, records []string, writeErr error) error {
 	dlq := NewDLQWriter(c.client)
-	var firstErr error
+	var (
+		wg       sync.WaitGroup
+		firstErr error
+		mu       sync.Mutex
+	)
+	sem := make(chan struct{}, c.dlqConcurrency)
+
 	for _, record := range records {
-		entry := domain.DLQEntry{
-			Bucket:     c.bucket,
-			Data:       []byte(record),
-			RetryCount: maxDLQRetries,
-			LastError:  writeErr.Error(),
-		}
-		if err := dlq.Write(ctx, c.bucket, entry); err != nil {
-			log.Printf("[consumer] dlq write failed for bucket %s: %v", c.bucket, err)
-			if firstErr == nil {
-				firstErr = err
+		wg.Add(1)
+		go func(r string) {
+			defer wg.Done()
+			sem <- struct{}{}
+			defer func() { <-sem }()
+
+			entry := domain.DLQEntry{
+				Bucket:     c.bucket,
+				Data:       []byte(r),
+				RetryCount: maxDLQRetries,
+				LastError:  writeErr.Error(),
 			}
-		}
+
+			// 每个写入操作有独立超时
+			writeCtx, cancel := context.WithTimeout(ctx, c.dlqWriteTimeout)
+			defer cancel()
+			if err := dlq.Write(writeCtx, c.bucket, entry); err != nil {
+				log.Printf("[consumer] dlq write failed for bucket %s: %v", c.bucket, err)
+				mu.Lock()
+				if firstErr == nil {
+					firstErr = err
+				}
+				mu.Unlock()
+			}
+		}(record)
 	}
+	wg.Wait()
 	return firstErr
 }
 
