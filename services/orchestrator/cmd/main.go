@@ -87,7 +87,8 @@ func main() {
 
 	// Snapshot provider: aggregates current state for new WS clients
 	wsHub.SnapshotProvider = func() map[string]interface{} {
-		ctx := context.Background()
+		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+		defer cancel()
 		snap := map[string]interface{}{
 			"system_status": map[string]interface{}{
 				"mode":     "normal",
@@ -98,8 +99,11 @@ func main() {
 			if pos, err := tradingClient.GetPositions(ctx); err == nil {
 				snap["positions"] = pos
 			}
-		} else if pos, err := redisReader.Position(ctx); err == nil {
-			snap["positions"] = pos
+		}
+		if snap["positions"] == nil {
+			if pos, err := redisReader.Position(ctx); err == nil {
+				snap["positions"] = pos
+			}
 		}
 		if score, err := redisReader.AIScore(ctx, "MA2509"); err == nil {
 			snap["scores"] = score
@@ -110,7 +114,8 @@ func main() {
 
 	// Price relay: poll Redis last_price:* → push WS deltas to contract:<symbol>
 	priceRelay := adapters.NewPriceRelay(redisClient, wsHub)
-	go priceRelay.Start(context.Background())
+	relayCtx, relayCancel := context.WithCancel(context.Background())
+	go priceRelay.Start(relayCtx)
 
 	// HTTP Handler
 	mux := http.NewServeMux()
@@ -181,6 +186,11 @@ func main() {
 
 	if tradingClient != nil {
 		tradingClient.Close()
+	}
+	relayCancel()
+
+	if influxReader != nil {
+		influxReader.Close()
 	}
 
 	regCtx, regCancel := context.WithTimeout(context.Background(), 3*time.Second)
@@ -528,6 +538,10 @@ func makeAIScoresHandler(redis *redisreader.Reader) http.HandlerFunc {
 func makeOrdersHandler(influx *adapters.InfluxReader) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
+		if r.Method != http.MethodGet {
+			http.Error(w, `{"error":"method not allowed"}`, http.StatusMethodNotAllowed)
+			return
+		}
 		if influx == nil {
 			_ = json.NewEncoder(w).Encode(map[string]interface{}{"orders": []interface{}{}})
 			return
@@ -545,6 +559,10 @@ func makeOrdersHandler(influx *adapters.InfluxReader) http.HandlerFunc {
 func makeTradesHandler(influx *adapters.InfluxReader) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
+		if r.Method != http.MethodGet {
+			http.Error(w, `{"error":"method not allowed"}`, http.StatusMethodNotAllowed)
+			return
+		}
 		if influx == nil {
 			_ = json.NewEncoder(w).Encode(map[string]interface{}{"trades": []interface{}{}})
 			return
@@ -562,6 +580,10 @@ func makeTradesHandler(influx *adapters.InfluxReader) http.HandlerFunc {
 func makeAIScoresHistoryHandler(influx *adapters.InfluxReader) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
+		if r.Method != http.MethodGet {
+			http.Error(w, `{"error":"method not allowed"}`, http.StatusMethodNotAllowed)
+			return
+		}
 		if influx == nil {
 			_ = json.NewEncoder(w).Encode(map[string]interface{}{"scores": []interface{}{}})
 			return
@@ -582,6 +604,10 @@ func makeAIScoresHistoryHandler(influx *adapters.InfluxReader) http.HandlerFunc 
 func makeAuditHandler(influx *adapters.InfluxReader) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
+		if r.Method != http.MethodGet {
+			http.Error(w, `{"error":"method not allowed"}`, http.StatusMethodNotAllowed)
+			return
+		}
 		if influx == nil {
 			_ = json.NewEncoder(w).Encode(map[string]interface{}{"entries": []interface{}{}})
 			return
@@ -661,13 +687,15 @@ func makeRiskHandler(trading *trading_client.Client, audit *audit_writer.Writer)
 		w.Header().Set("Content-Type", "application/json")
 		switch r.Method {
 		case http.MethodGet:
-			if trading != nil {
-				if status, err := trading.GetStatus(r.Context()); err == nil {
-					_ = json.NewEncoder(w).Encode(status)
-					return
-				}
-			}
-			_ = json.NewEncoder(w).Encode(map[string]interface{}{"risk_params": map[string]interface{}{}})
+			_ = json.NewEncoder(w).Encode(map[string]interface{}{
+				"risk_params": map[string]interface{}{
+					"max_position_size": nil,
+					"max_daily_loss":    nil,
+					"stop_loss_pct":     nil,
+					"mode":              "not_configured",
+				},
+				"note": "risk params not yet implemented in trading_agent",
+			})
 
 		case http.MethodPost:
 			if trading == nil {

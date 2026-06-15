@@ -5,6 +5,7 @@ import (
 	"context"
 	"fmt"
 	"log"
+	"regexp"
 	"time"
 
 	influxdb2 "github.com/influxdata/influxdb-client-go/v2"
@@ -28,10 +29,24 @@ func (r *InfluxReader) Close() {
 	r.client.Close()
 }
 
+// validateSymbol ensures symbol matches expected pattern to prevent Flux injection
+func validateSymbol(s string) error {
+	matched, _ := regexp.MatchString(`^[A-Za-z0-9]{1,10}$`, s)
+	if !matched {
+		return fmt.Errorf("invalid symbol: %q", s)
+	}
+	return nil
+}
+
 // ---- Query helpers --------------------------------------------------------
 
 // QueryOrders returns today's orders from order_history bucket
 func (r *InfluxReader) QueryOrders(ctx context.Context, symbol string, limit int) ([]map[string]interface{}, error) {
+	if symbol != "" {
+		if err := validateSymbol(symbol); err != nil {
+			return nil, err
+		}
+	}
 	filter := ""
 	if symbol != "" {
 		filter = fmt.Sprintf(`|> filter(fn: (r) => r["symbol"] == "%s")`, symbol)
@@ -51,6 +66,11 @@ func (r *InfluxReader) QueryOrders(ctx context.Context, symbol string, limit int
 
 // QueryTrades returns today's filled trades
 func (r *InfluxReader) QueryTrades(ctx context.Context, symbol string, limit int) ([]map[string]interface{}, error) {
+	if symbol != "" {
+		if err := validateSymbol(symbol); err != nil {
+			return nil, err
+		}
+	}
 	filter := `|> filter(fn: (r) => r["_field"] == "status" or r["_field"] == "filled_volume")`
 	if symbol != "" {
 		filter += fmt.Sprintf(`\n|> filter(fn: (r) => r["symbol"] == "%s")`, symbol)
@@ -71,6 +91,11 @@ func (r *InfluxReader) QueryTrades(ctx context.Context, symbol string, limit int
 
 // QueryAIScoreHistory returns AI score history for a symbol
 func (r *InfluxReader) QueryAIScoreHistory(ctx context.Context, symbol string, from, to time.Time, limit int) ([]map[string]interface{}, error) {
+	if symbol != "" {
+		if err := validateSymbol(symbol); err != nil {
+			return nil, err
+		}
+	}
 	if symbol == "" {
 		symbol = "MA2509"
 	}
@@ -95,6 +120,11 @@ func (r *InfluxReader) QueryAIScoreHistory(ctx context.Context, symbol string, f
 
 // QueryIntraday returns minute-level OHLC for a symbol (today)
 func (r *InfluxReader) QueryIntraday(ctx context.Context, symbol string, limit int) ([]map[string]interface{}, error) {
+	if symbol != "" {
+		if err := validateSymbol(symbol); err != nil {
+			return nil, err
+		}
+	}
 	if symbol == "" {
 		symbol = "MA2509"
 	}
@@ -113,6 +143,11 @@ func (r *InfluxReader) QueryIntraday(ctx context.Context, symbol string, limit i
 
 // QueryKLine returns daily/weekly/monthly OHLC bars
 func (r *InfluxReader) QueryKLine(ctx context.Context, symbol string, period string, from, to time.Time, limit int) ([]map[string]interface{}, error) {
+	if symbol != "" {
+		if err := validateSymbol(symbol); err != nil {
+			return nil, err
+		}
+	}
 	if symbol == "" {
 		symbol = "MA2509"
 	}

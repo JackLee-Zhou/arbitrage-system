@@ -46,8 +46,8 @@ func NewHub() *Hub {
 	return &Hub{
 		clients:    make(map[*Client]bool),
 		broadcast:  make(chan *Message, 256),
-		register:   make(chan *Client),
-		unregister: make(chan *Client),
+		register:   make(chan *Client, 32),
+		unregister: make(chan *Client, 32),
 		upgrader: websocket.Upgrader{
 			ReadBufferSize:  1024,
 			WriteBufferSize: 4096,
@@ -70,15 +70,17 @@ func (h *Hub) Run() {
 			h.mu.Unlock()
 
 			if h.SnapshotProvider != nil {
-				snap := h.SnapshotProvider()
-				for channel, data := range snap {
-					client.sendMessage(&Message{
-						Type:    "snapshot",
-						Channel: channel,
-						TS:      time.Now().UnixMilli(),
-						Data:    data,
-					})
-				}
+				go func(cl *Client) {
+					snap := h.SnapshotProvider()
+					for channel, data := range snap {
+						cl.sendMessage(&Message{
+							Type:    "snapshot",
+							Channel: channel,
+							TS:      time.Now().UnixMilli(),
+							Data:    data,
+						})
+					}
+				}(client)
 			}
 
 		case client := <-h.unregister:
