@@ -56,10 +56,15 @@
 
 **请求方**：dashboard_web (OPT-302 概览首页)
 **登记时间**：2026-06-15
-**状态**：[~] 实现中 (claude @ 2026-06-15)
+**状态**：[x] 已实现
 
 **场景**：
-概览首页四区卡片需要：系统健康状态、当前持仓汇总、AI 评分、实时事件流。当前 handler 只返回 services + ai_score + engine 基础字段，缺少 todayStats（今日委托/成交/盈亏汇总）。
+概览首页四区卡片需要：系统健康状态、当前持仓汇总、AI 评分、实时事件流。
+
+**实现摘要**：
+- 实现位置：`services/orchestrator/cmd/main.go:makeOverviewHandler`
+- 增强字段：services + positions + ai_score + engine + today_stats
+- 边界：trading_agent 断连时 engine/positions 为 null，不报 500
 
 **需要的接口**：
 - 路径：`GET /api/v1/overview`
@@ -84,10 +89,17 @@
 
 **请求方**：dashboard_web (全局实时数据)
 **登记时间**：2026-06-15
-**状态**：[~] 实现中 (claude @ 2026-06-15)
+**状态**：[x] 已实现
 
 **场景**：
-Dashboard 所有页面需要实时数据推送：价格更新、持仓变化、AI 评分更新、告警事件。当前 /ws 返回 "not yet implemented" 占位字符串。
+Dashboard 所有页面需要实时数据推送：价格更新、持仓变化、AI 评分更新、告警事件。
+
+**实现摘要**：
+- 实现位置：`services/orchestrator/internal/api/websocket/hub.go`
+- 技术栈：gorilla/websocket + channel-based Hub
+- SnapshotProvider：新连接推送全量快照（system_status/positions/scores/alerts）
+- Delta 节流：1Hz throttle per channel
+- 心跳：30s server ping
 
 **需要的接口**：
 - 端点：`GET /ws`（WebSocket upgrade）
@@ -105,10 +117,15 @@ Dashboard 所有页面需要实时数据推送：价格更新、持仓变化、A
 
 **请求方**：dashboard_web (持仓固定栏 + 合约浏览页)
 **登记时间**：2026-06-15
-**状态**：[~] 实现中 (claude @ 2026-06-15)
+**状态**：[x] 已实现
 
 **场景**：
-Dashboard 顶栏右侧持仓显示 + 合约浏览页持仓详情需要实时持仓数据。当前 handler 已有基本实现（gRPC → Redis 兜底），需增加按 symbol 查询参数。
+Dashboard 顶栏右侧持仓显示 + 合约浏览页持仓详情需要实时持仓数据。
+
+**实现摘要**：
+- 实现位置：`services/orchestrator/cmd/main.go:makePositionsHandler`
+- 增强：支持 `?symbol=MA2509` 单合约过滤（filterPosition 辅助）
+- 数据源：gRPC trading_agent → Redis 兜底 → 空数组
 
 **需要的接口**：
 - 路径：`GET /api/v1/positions` 和 `GET /api/v1/positions?symbol=MA2509`
