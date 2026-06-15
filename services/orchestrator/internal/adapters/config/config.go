@@ -14,6 +14,9 @@ type Config struct {
 	HTTPPort         string // HTTP_PORT
 	RedisAddr        string // REDIS_ADDR
 	TradingAgentGRPC string // TRADING_AGENT_GRPC
+	InfluxURL        string // INFLUXDB_URL
+	InfluxToken      string // INFLUXDB_TOKEN
+	InfluxOrg        string // INFLUXDB_ORG
 	ReadTimeout      time.Duration
 	WriteTimeout     time.Duration
 	IdleTimeout      time.Duration
@@ -28,6 +31,9 @@ func Load() Config {
 		HTTPPort:         getEnv("HTTP_PORT", "8080"),
 		RedisAddr:        getEnv("REDIS_ADDR", "redis:6379"),
 		TradingAgentGRPC: getEnv("TRADING_AGENT_GRPC", "trading_agent:9090"),
+		InfluxURL:        getEnv("INFLUXDB_URL", "http://influxdb:8086"),
+		InfluxToken:      getEnv("INFLUXDB_TOKEN", ""),
+		InfluxOrg:        getEnv("INFLUXDB_ORG", "arbitrage"),
 		ReadTimeout:      getEnvDuration("HTTP_READ_TIMEOUT", 10*time.Second),
 		WriteTimeout:     getEnvDuration("HTTP_WRITE_TIMEOUT", 10*time.Second),
 		IdleTimeout:      getEnvDuration("HTTP_IDLE_TIMEOUT", 120*time.Second),

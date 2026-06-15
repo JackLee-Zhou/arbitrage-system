@@ -52,6 +52,14 @@ func main() {
 	// 审计日志
 	auditWriter := audit_writer.NewWriter(redisClient)
 
+	// InfluxDB 只读（dashboard 历史数据查询）
+	var influxReader *adapters.InfluxReader
+	if cfg.InfluxToken != "" {
+		influxReader = adapters.NewInfluxReader(cfg.InfluxURL, cfg.InfluxToken, cfg.InfluxOrg)
+	} else {
+		log.Println("[orchestrator] WARNING: INFLUXDB_TOKEN not set, /orders /trades /audit /history will be empty")
+	}
+
 	// 服务健康巡检（从 Redis 发现 + 探 /healthz → 缓存结果 → overview 暴露）
 	healthPoller := adapters.NewHealthPoller(redisClient, 15*time.Second)
 	go healthPoller.Start(context.Background())
@@ -100,6 +108,10 @@ func main() {
 	}
 	go wsHub.Run()
 
+	// Price relay: poll Redis last_price:* → push WS deltas to contract:<symbol>
+	priceRelay := adapters.NewPriceRelay(redisClient, wsHub)
+	go priceRelay.Start(context.Background())
+
 	// HTTP Handler
 	mux := http.NewServeMux()
 
@@ -128,9 +140,13 @@ func main() {
 	mux.HandleFunc("/api/v1/strategies", makeStrategiesHandler(tradingClient, auditWriter))
 	mux.HandleFunc("/api/v1/risk", makeRiskHandler(tradingClient, auditWriter))
 	mux.HandleFunc("/api/v1/contracts", makeContractsHandler(redisReader))
-	mux.HandleFunc("/api/v1/contracts/", makeContractSnapshotHandler(redisReader))
+	mux.HandleFunc("/api/v1/contracts/", makeContractDetailHandler(redisReader, influxReader))
 	mux.HandleFunc("/api/v1/ai/scores/current", makeAIScoresHandler(redisReader))
 	mux.HandleFunc("/api/v1/services", makeServicesHandler(healthPoller))
+	mux.HandleFunc("/api/v1/orders", makeOrdersHandler(influxReader))
+	mux.HandleFunc("/api/v1/trades", makeTradesHandler(influxReader))
+	mux.HandleFunc("/api/v1/ai/scores/history", makeAIScoresHistoryHandler(influxReader))
+	mux.HandleFunc("/api/v1/audit", makeAuditHandler(influxReader))
 	mux.HandleFunc("/ws", wsHub.HandleUpgrade)
 
 	// 中间件链：日志 → 交易时段守卫
@@ -389,7 +405,7 @@ func makeContractsHandler(redis *redisreader.Reader) http.HandlerFunc {
 	}
 }
 
-func makeContractSnapshotHandler(redis *redisreader.Reader) http.HandlerFunc {
+func makeContractDetailHandler(redis *redisreader.Reader, influx *adapters.InfluxReader) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
 		if r.Method != http.MethodGet {
@@ -397,37 +413,71 @@ func makeContractSnapshotHandler(redis *redisreader.Reader) http.HandlerFunc {
 			return
 		}
 
-		// 从路径提取 symbol，如 /api/v1/contracts/MA2509/snapshot
 		path := strings.TrimPrefix(r.URL.Path, "/api/v1/contracts/")
-		path = strings.TrimSuffix(path, "/snapshot")
-		path = strings.TrimSuffix(path, "/")
-		symbol := strings.Split(path, "/")[0]
-		if symbol == "" {
+		parts := strings.Split(strings.TrimSuffix(path, "/"), "/")
+		if len(parts) == 0 || parts[0] == "" {
 			http.Error(w, `{"error":"symbol required"}`, http.StatusBadRequest)
 			return
 		}
+		symbol := parts[0]
+		subPath := ""
+		if len(parts) > 1 {
+			subPath = parts[1]
+		}
 
 		ctx := r.Context()
-		fields, err := redis.HGetAll(ctx, "last_price:"+symbol)
-		if err != nil {
-			http.Error(w, fmt.Sprintf(`{"error":"contract %s not found"}`, symbol), http.StatusNotFound)
-			return
-		}
 
-		result := map[string]interface{}{
-			"symbol":        symbol,
-			"name":          fields["name"],
-			"last_price":    fields["last_price"],
-			"open":          fields["open"],
-			"high":          fields["high"],
-			"low":           fields["low"],
-			"change_pct":    fields["change_pct"],
-			"volume":        fields["volume"],
-			"open_interest": fields["open_interest"],
-			"updated_at":    fields["updated_at"],
-		}
+		switch subPath {
+		case "intraday":
+			if influx == nil {
+				http.Error(w, `{"error":"influxdb not configured"}`, http.StatusServiceUnavailable)
+				return
+			}
+			data, err := influx.QueryIntraday(ctx, symbol, 240)
+			if err != nil {
+				_ = json.NewEncoder(w).Encode(map[string]interface{}{"data": []interface{}{}, "symbol": symbol})
+				return
+			}
+			_ = json.NewEncoder(w).Encode(map[string]interface{}{"data": data, "symbol": symbol})
 
-		_ = json.NewEncoder(w).Encode(result)
+		case "kline":
+			if influx == nil {
+				http.Error(w, `{"error":"influxdb not configured"}`, http.StatusServiceUnavailable)
+				return
+			}
+			period := r.URL.Query().Get("period")
+			if period == "" {
+				period = "1d"
+			}
+			data, err := influx.QueryKLine(ctx, symbol, period, time.Time{}, time.Time{}, 60)
+			if err != nil {
+				_ = json.NewEncoder(w).Encode(map[string]interface{}{"data": []interface{}{}, "symbol": symbol})
+				return
+			}
+			_ = json.NewEncoder(w).Encode(map[string]interface{}{"data": data, "symbol": symbol, "period": period})
+
+		default: // snapshot
+			fields, err := redis.HGetAll(ctx, "last_price:"+symbol)
+			if err != nil {
+				http.Error(w, fmt.Sprintf(`{"error":"contract %s not found"}`, symbol), http.StatusNotFound)
+				return
+			}
+			result := map[string]interface{}{
+				"symbol":        symbol,
+				"last_price":    fields["last_price"],
+				"open":          fields["open"],
+				"high":          fields["high"],
+				"low":           fields["low"],
+				"change_pct":    fields["change_pct"],
+				"volume":        fields["volume"],
+				"open_interest": fields["open_interest"],
+				"updated_at":    fields["updated_at"],
+			}
+			if name, ok := fields["name"]; ok {
+				result["name"] = name
+			}
+			_ = json.NewEncoder(w).Encode(result)
+		}
 	}
 }
 
@@ -472,6 +522,76 @@ func makeAIScoresHandler(redis *redisreader.Reader) http.HandlerFunc {
 		}
 
 		_ = json.NewEncoder(w).Encode(result)
+	}
+}
+
+func makeOrdersHandler(influx *adapters.InfluxReader) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		if influx == nil {
+			_ = json.NewEncoder(w).Encode(map[string]interface{}{"orders": []interface{}{}})
+			return
+		}
+		symbol := r.URL.Query().Get("symbol")
+		data, err := influx.QueryOrders(r.Context(), symbol, 50)
+		if err != nil {
+			_ = json.NewEncoder(w).Encode(map[string]interface{}{"orders": []interface{}{}})
+			return
+		}
+		_ = json.NewEncoder(w).Encode(map[string]interface{}{"orders": data})
+	}
+}
+
+func makeTradesHandler(influx *adapters.InfluxReader) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		if influx == nil {
+			_ = json.NewEncoder(w).Encode(map[string]interface{}{"trades": []interface{}{}})
+			return
+		}
+		symbol := r.URL.Query().Get("symbol")
+		data, err := influx.QueryTrades(r.Context(), symbol, 50)
+		if err != nil {
+			_ = json.NewEncoder(w).Encode(map[string]interface{}{"trades": []interface{}{}})
+			return
+		}
+		_ = json.NewEncoder(w).Encode(map[string]interface{}{"trades": data})
+	}
+}
+
+func makeAIScoresHistoryHandler(influx *adapters.InfluxReader) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		if influx == nil {
+			_ = json.NewEncoder(w).Encode(map[string]interface{}{"scores": []interface{}{}})
+			return
+		}
+		symbol := r.URL.Query().Get("symbol")
+		if symbol == "" {
+			symbol = "MA2509"
+		}
+		data, err := influx.QueryAIScoreHistory(r.Context(), symbol, time.Time{}, time.Time{}, 100)
+		if err != nil {
+			_ = json.NewEncoder(w).Encode(map[string]interface{}{"scores": []interface{}{}})
+			return
+		}
+		_ = json.NewEncoder(w).Encode(map[string]interface{}{"scores": data, "symbol": symbol})
+	}
+}
+
+func makeAuditHandler(influx *adapters.InfluxReader) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		if influx == nil {
+			_ = json.NewEncoder(w).Encode(map[string]interface{}{"entries": []interface{}{}})
+			return
+		}
+		data, err := influx.QueryAudit(r.Context(), time.Time{}, 100)
+		if err != nil {
+			_ = json.NewEncoder(w).Encode(map[string]interface{}{"entries": []interface{}{}})
+			return
+		}
+		_ = json.NewEncoder(w).Encode(map[string]interface{}{"entries": data})
 	}
 }
 

@@ -1,0 +1,193 @@
+// Package adapters — InfluxDB read-only queries for dashboard
+package adapters
+
+import (
+	"context"
+	"fmt"
+	"log"
+	"time"
+
+	influxdb2 "github.com/influxdata/influxdb-client-go/v2"
+)
+
+// InfluxReader provides read-only InfluxDB queries for dashboard endpoints
+type InfluxReader struct {
+	client influxdb2.Client
+	org    string
+}
+
+// NewInfluxReader creates an InfluxReader
+func NewInfluxReader(url, token, org string) *InfluxReader {
+	client := influxdb2.NewClient(url, token)
+	log.Printf("[influx-reader] connected to %s org=%s", url, org)
+	return &InfluxReader{client: client, org: org}
+}
+
+// Close releases the InfluxDB client
+func (r *InfluxReader) Close() {
+	r.client.Close()
+}
+
+// ---- Query helpers --------------------------------------------------------
+
+// QueryOrders returns today's orders from order_history bucket
+func (r *InfluxReader) QueryOrders(ctx context.Context, symbol string, limit int) ([]map[string]interface{}, error) {
+	filter := ""
+	if symbol != "" {
+		filter = fmt.Sprintf(`|> filter(fn: (r) => r["symbol"] == "%s")`, symbol)
+	}
+	if limit <= 0 {
+		limit = 50
+	}
+	flux := fmt.Sprintf(`
+		from(bucket: "order_history")
+		|> range(start: -24h)
+		%s
+		|> sort(columns: ["_time"], desc: true)
+		|> limit(n: %d)
+	`, filter, limit)
+	return r.executeQuery(ctx, flux)
+}
+
+// QueryTrades returns today's filled trades
+func (r *InfluxReader) QueryTrades(ctx context.Context, symbol string, limit int) ([]map[string]interface{}, error) {
+	filter := `|> filter(fn: (r) => r["_field"] == "status" or r["_field"] == "filled_volume")`
+	if symbol != "" {
+		filter += fmt.Sprintf(`\n|> filter(fn: (r) => r["symbol"] == "%s")`, symbol)
+	}
+	if limit <= 0 {
+		limit = 50
+	}
+	flux := fmt.Sprintf(`
+		from(bucket: "order_history")
+		|> range(start: -24h)
+		%s
+		|> filter(fn: (r) => r["status"] == "filled" or r["status"] == "partial")
+		|> sort(columns: ["_time"], desc: true)
+		|> limit(n: %d)
+	`, filter, limit)
+	return r.executeQuery(ctx, flux)
+}
+
+// QueryAIScoreHistory returns AI score history for a symbol
+func (r *InfluxReader) QueryAIScoreHistory(ctx context.Context, symbol string, from, to time.Time, limit int) ([]map[string]interface{}, error) {
+	if symbol == "" {
+		symbol = "MA2509"
+	}
+	if from.IsZero() {
+		from = time.Now().Add(-24 * time.Hour)
+	}
+	if to.IsZero() {
+		to = time.Now()
+	}
+	if limit <= 0 {
+		limit = 100
+	}
+	flux := fmt.Sprintf(`
+		from(bucket: "ai_score_history")
+		|> range(start: %s, stop: %s)
+		|> filter(fn: (r) => r["symbol"] == "%s")
+		|> sort(columns: ["_time"], desc: false)
+		|> limit(n: %d)
+	`, from.Format(time.RFC3339), to.Format(time.RFC3339), symbol, limit)
+	return r.executeQuery(ctx, flux)
+}
+
+// QueryIntraday returns minute-level OHLC for a symbol (today)
+func (r *InfluxReader) QueryIntraday(ctx context.Context, symbol string, limit int) ([]map[string]interface{}, error) {
+	if symbol == "" {
+		symbol = "MA2509"
+	}
+	if limit <= 0 {
+		limit = 240 // 4 hours of 1-min data
+	}
+	flux := fmt.Sprintf(`
+		from(bucket: "ma_1min")
+		|> range(start: -8h)
+		|> filter(fn: (r) => r["symbol"] == "%s")
+		|> sort(columns: ["_time"], desc: false)
+		|> limit(n: %d)
+	`, symbol, limit)
+	return r.executeQuery(ctx, flux)
+}
+
+// QueryKLine returns daily/weekly/monthly OHLC bars
+func (r *InfluxReader) QueryKLine(ctx context.Context, symbol string, period string, from, to time.Time, limit int) ([]map[string]interface{}, error) {
+	if symbol == "" {
+		symbol = "MA2509"
+	}
+	if from.IsZero() {
+		from = time.Now().Add(-30 * 24 * time.Hour)
+	}
+	if to.IsZero() {
+		to = time.Now()
+	}
+	if limit <= 0 {
+		limit = 60
+	}
+
+	window := "1d"
+	switch period {
+	case "1w", "week", "weekly":
+		window = "1w"
+	case "1mo", "month", "monthly":
+		window = "1mo"
+	}
+
+	flux := fmt.Sprintf(`
+		from(bucket: "ma_1min")
+		|> range(start: %s, stop: %s)
+		|> filter(fn: (r) => r["symbol"] == "%s")
+		|> aggregateWindow(every: %s, fn: first, createEmpty: false)
+		|> sort(columns: ["_time"], desc: false)
+		|> limit(n: %d)
+	`, from.Format(time.RFC3339), to.Format(time.RFC3339), symbol, window, limit)
+	return r.executeQuery(ctx, flux)
+}
+
+// QueryAudit returns recent audit log entries
+func (r *InfluxReader) QueryAudit(ctx context.Context, from time.Time, limit int) ([]map[string]interface{}, error) {
+	if from.IsZero() {
+		from = time.Now().Add(-7 * 24 * time.Hour)
+	}
+	if limit <= 0 {
+		limit = 100
+	}
+	flux := fmt.Sprintf(`
+		from(bucket: "audit_log")
+		|> range(start: %s)
+		|> sort(columns: ["_time"], desc: true)
+		|> limit(n: %d)
+	`, from.Format(time.RFC3339), limit)
+	return r.executeQuery(ctx, flux)
+}
+
+func (r *InfluxReader) executeQuery(ctx context.Context, flux string) ([]map[string]interface{}, error) {
+	queryAPI := r.client.QueryAPI(r.org)
+	result, err := queryAPI.Query(ctx, flux)
+	if err != nil {
+		return nil, fmt.Errorf("influx query failed: %w", err)
+	}
+	defer func() { _ = result.Close() }()
+
+	var rows []map[string]interface{}
+	for result.Next() {
+		record := result.Record()
+		row := map[string]interface{}{
+			"time":  record.Time().UnixMilli(),
+			"field": record.Field(),
+			"value": record.Value(),
+		}
+		for k, v := range record.Values() {
+			if k != "_time" && k != "_field" && k != "_value" && k != "_measurement" && k != "_start" && k != "_stop" && k != "result" && k != "table" {
+				row[k] = v
+			}
+		}
+		rows = append(rows, row)
+	}
+
+	if err := result.Err(); err != nil {
+		return rows, fmt.Errorf("influx read error: %w", err)
+	}
+	return rows, nil
+}
