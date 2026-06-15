@@ -616,6 +616,27 @@
 
 ---
 
+### OPT-208 orchestrator InfluxDB 查询结果缓存 🟢 P2
+
+**背景**：orchestrator 新增 6 个 InfluxDB 历史数据端点（orders/trades/ai_scores_history/intraday/kline/audit），每次请求都直接执行 Flux 查询。K 线 120 天数据扫描 ~28,800 行耗时 3-8 秒，多次重复请求浪费 InfluxDB 资源。
+
+**目标**：在 orchestrator 内存中增加轻量缓存层，对相同参数（symbol/period/from/to）的历史查询结果缓存 TTL。
+
+**拆解**：
+- [ ] **OPT-208-a** 实现内存缓存（map + sync.RWMutex + TTL goroutine）
+  - Key: `{endpoint}:{symbol}:{period}:{from}:{to}` hash
+  - TTL: K 线 5min / 分时 30s / 评分历史 2min / audit 1min / orders+trades 30s
+  - 最大条目数: 200（LRU 淘汰或简单 FIFO）
+- [ ] **OPT-208-b** 侵入点：在 `executeQuery` 调用前检查缓存，命中则直接返回
+
+**风险**：
+- ⚠️ orchestrator 是无状态服务（重启缓存丢失），不影响正确性，仅影响性能
+- ⚠️ 缓存空间需控制上限，避免单服务内存超 600MB 硬限制
+
+**关联**：`services/orchestrator/internal/adapters/influx_reader.go`
+
+---
+
 ## 六、其他已识别的优化（开放区）
 
 > 这一区域用来记录在开发过程中发现但还没立即处理的优化机会。

@@ -162,16 +162,42 @@ func (r *InfluxReader) QueryAudit(ctx context.Context, from time.Time, limit int
 	return r.executeQuery(ctx, flux)
 }
 
+const (
+	defaultQueryTimeout = 5 * time.Second
+	maxRowsPerQuery     = 2000
+)
+
 func (r *InfluxReader) executeQuery(ctx context.Context, flux string) ([]map[string]interface{}, error) {
+	// Per-query timeout: prevents a slow Flux query from hogging the goroutine forever.
+	// Heavy queries (120d K-line ~3-8s) get the full budget; light queries finish early.
+	queryCtx, cancel := context.WithTimeout(ctx, defaultQueryTimeout)
+	defer cancel()
+
 	queryAPI := r.client.QueryAPI(r.org)
-	result, err := queryAPI.Query(ctx, flux)
+	result, err := queryAPI.Query(queryCtx, flux)
 	if err != nil {
 		return nil, fmt.Errorf("influx query failed: %w", err)
 	}
-	defer func() { _ = result.Close() }()
+	defer func() {
+		// Close drains the remaining result stream and releases the HTTP connection.
+		// Must always be called, even on error paths, to avoid goroutine/connection leaks.
+		_ = result.Close()
+	}()
 
 	var rows []map[string]interface{}
 	for result.Next() {
+		// Respect context cancellation (client disconnected / timeout)
+		select {
+		case <-queryCtx.Done():
+			return rows, fmt.Errorf("query cancelled: %w", queryCtx.Err())
+		default:
+		}
+
+		// Hard cap to prevent OOM from unexpectedly large result sets
+		if len(rows) >= maxRowsPerQuery {
+			break
+		}
+
 		record := result.Record()
 		row := map[string]interface{}{
 			"time":  record.Time().UnixMilli(),
