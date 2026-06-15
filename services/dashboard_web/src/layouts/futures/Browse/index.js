@@ -3,7 +3,8 @@
 // 点击合约 → 左侧卷轴收缩动画 → 右侧展开详情
 // ============================================================================
 
-import { useState, useMemo, useCallback } from "react";
+import { useState, useMemo, useCallback, useEffect } from "react";
+import getWSManager from "api/ws";
 import { useQuery } from "@tanstack/react-query";
 import { emergencyClose, fetchContracts, fetchContractSnapshot } from "api/client";
 import Grid from "@mui/material/Grid";
@@ -107,6 +108,19 @@ function FuturesBrowse() {
   }, [selectedSymbol]);
 
   const onClose = () => selectSymbol(null);
+
+  // ---- WS subscription: follow selected contract in real-time ----------------
+  useEffect(() => {
+    const ws = getWSManager();
+    if (selectedSymbol) {
+      ws.subscribe([`contract:${selectedSymbol}`]);
+    }
+    return () => {
+      if (selectedSymbol) {
+        ws.unsubscribe([`contract:${selectedSymbol}`]);
+      }
+    };
+  }, [selectedSymbol]);
 
   // ---- Contract list row ---------------------------------------------------
   const renderRow = (c) => (
