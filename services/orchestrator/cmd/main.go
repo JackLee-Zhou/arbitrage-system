@@ -10,6 +10,7 @@ import (
 	"net/http"
 	"os"
 	"os/signal"
+	"strings"
 	"syscall"
 	"time"
 
@@ -126,6 +127,10 @@ func main() {
 	mux.HandleFunc("/api/v1/emergency_close", makeEmergencyCloseHandler(tradingClient, auditWriter))
 	mux.HandleFunc("/api/v1/strategies", makeStrategiesHandler(tradingClient, auditWriter))
 	mux.HandleFunc("/api/v1/risk", makeRiskHandler(tradingClient, auditWriter))
+	mux.HandleFunc("/api/v1/contracts", makeContractsHandler(redisReader))
+	mux.HandleFunc("/api/v1/contracts/", makeContractSnapshotHandler(redisReader))
+	mux.HandleFunc("/api/v1/ai/scores/current", makeAIScoresHandler(redisReader))
+	mux.HandleFunc("/api/v1/services", makeServicesHandler(healthPoller))
 	mux.HandleFunc("/ws", wsHub.HandleUpgrade)
 
 	// 中间件链：日志 → 交易时段守卫
@@ -277,6 +282,7 @@ func makeEmergencyCloseHandler(trading *trading_client.Client, audit *audit_writ
 		var req struct {
 			Symbol string `json:"symbol"`
 			Reason string `json:"reason"`
+			Scope  string `json:"scope"`
 		}
 		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 			http.Error(w, `{"error":"invalid request body"}`, http.StatusBadRequest)
@@ -287,14 +293,27 @@ func makeEmergencyCloseHandler(trading *trading_client.Client, audit *audit_writ
 			return
 		}
 
-		resp, err := trading.EmergencyClose(r.Context(), req.Reason, req.Symbol)
+		// scope 解析："single" → 传入 symbol；"all" → 传入空 symbol
+		targetSymbol := req.Symbol
+		switch req.Scope {
+		case "all":
+			targetSymbol = ""
+		default:
+			// "single" 或空值：使用 req.Symbol 原值
+		}
+
+		resp, err := trading.EmergencyClose(r.Context(), req.Reason, targetSymbol)
 
 		// 审计日志
+		target := targetSymbol
+		if target == "" {
+			target = "all"
+		}
 		_ = audit.Write(r.Context(), domain.AuditEntry{
 			Timestamp: time.Now(),
 			Operator:  r.RemoteAddr,
 			Action:    "emergency_close",
-			Target:    req.Symbol,
+			Target:    target,
 			NewValue:  req.Reason,
 			Result:    resultFrom(err),
 			Error:     errStr(err),
@@ -306,6 +325,153 @@ func makeEmergencyCloseHandler(trading *trading_client.Client, audit *audit_writ
 			return
 		}
 		_ = json.NewEncoder(w).Encode(resp)
+	}
+}
+
+func makeServicesHandler(health *adapters.HealthPoller) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		if r.Method != http.MethodGet {
+			http.Error(w, `{"error":"method not allowed"}`, http.StatusMethodNotAllowed)
+			return
+		}
+		_ = json.NewEncoder(w).Encode(health.Snapshot())
+	}
+}
+
+func makeContractsHandler(redis *redisreader.Reader) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		if r.Method != http.MethodGet {
+			http.Error(w, `{"error":"method not allowed"}`, http.StatusMethodNotAllowed)
+			return
+		}
+
+		ctx := r.Context()
+		var contracts []map[string]interface{}
+
+		raw, err := redis.GetString(ctx, "instruments:all")
+		if err == nil {
+			var arr []map[string]interface{}
+			if err := json.Unmarshal([]byte(raw), &arr); err == nil {
+				contracts = arr
+			}
+		}
+
+		// Redis miss → 返回 mock 列表
+		if contracts == nil {
+			contracts = []map[string]interface{}{
+				{"symbol": "MA2509", "name": "甲醇2509", "exchange": "DCE", "price": 2456.0, "change_pct": 0.35, "volume": 125630, "is_main": true},
+				{"symbol": "MA2601", "name": "甲醇2601", "exchange": "DCE", "price": 2470.0, "change_pct": -0.12, "volume": 28640, "is_main": false},
+				{"symbol": "MA2505", "name": "甲醇2505", "exchange": "DCE", "price": 2440.0, "change_pct": 0.08, "volume": 15200, "is_main": false},
+				{"symbol": "RB2510", "name": "螺纹钢2510", "exchange": "SHFE", "price": 3780.0, "change_pct": 0.52, "volume": 342100, "is_main": true},
+				{"symbol": "HC2510", "name": "热卷2510", "exchange": "SHFE", "price": 3910.0, "change_pct": 0.41, "volume": 89400, "is_main": true},
+				{"symbol": "TA2509", "name": "PTA2509", "exchange": "CZCE", "price": 5880.0, "change_pct": -0.23, "volume": 234500, "is_main": true},
+				{"symbol": "EG2509", "name": "乙二醇2509", "exchange": "DCE", "price": 4620.0, "change_pct": 0.15, "volume": 67200, "is_main": true},
+				{"symbol": "PP2509", "name": "聚丙烯2509", "exchange": "DCE", "price": 7520.0, "change_pct": -0.08, "volume": 128900, "is_main": true},
+				{"symbol": "L2509", "name": "聚乙烯2509", "exchange": "DCE", "price": 8250.0, "change_pct": 0.31, "volume": 94500, "is_main": true},
+				{"symbol": "V2509", "name": "PVC2509", "exchange": "DCE", "price": 6020.0, "change_pct": -0.45, "volume": 78300, "is_main": true},
+			}
+		}
+
+		// ?type=main 过滤
+		if r.URL.Query().Get("type") == "main" {
+			var filtered []map[string]interface{}
+			for _, c := range contracts {
+				if main, ok := c["is_main"].(bool); ok && main {
+					filtered = append(filtered, c)
+				}
+			}
+			contracts = filtered
+		}
+
+		_ = json.NewEncoder(w).Encode(contracts)
+	}
+}
+
+func makeContractSnapshotHandler(redis *redisreader.Reader) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		if r.Method != http.MethodGet {
+			http.Error(w, `{"error":"method not allowed"}`, http.StatusMethodNotAllowed)
+			return
+		}
+
+		// 从路径提取 symbol，如 /api/v1/contracts/MA2509/snapshot
+		path := strings.TrimPrefix(r.URL.Path, "/api/v1/contracts/")
+		path = strings.TrimSuffix(path, "/snapshot")
+		path = strings.TrimSuffix(path, "/")
+		symbol := strings.Split(path, "/")[0]
+		if symbol == "" {
+			http.Error(w, `{"error":"symbol required"}`, http.StatusBadRequest)
+			return
+		}
+
+		ctx := r.Context()
+		fields, err := redis.HGetAll(ctx, "last_price:"+symbol)
+		if err != nil {
+			http.Error(w, fmt.Sprintf(`{"error":"contract %s not found"}`, symbol), http.StatusNotFound)
+			return
+		}
+
+		result := map[string]interface{}{
+			"symbol":        symbol,
+			"name":          fields["name"],
+			"last_price":    fields["last_price"],
+			"open":          fields["open"],
+			"high":          fields["high"],
+			"low":           fields["low"],
+			"change_pct":    fields["change_pct"],
+			"volume":        fields["volume"],
+			"open_interest": fields["open_interest"],
+			"updated_at":    fields["updated_at"],
+		}
+
+		_ = json.NewEncoder(w).Encode(result)
+	}
+}
+
+func makeAIScoresHandler(redis *redisreader.Reader) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		if r.Method != http.MethodGet {
+			http.Error(w, `{"error":"method not allowed"}`, http.StatusMethodNotAllowed)
+			return
+		}
+
+		ctx := r.Context()
+		symbol := r.URL.Query().Get("symbol")
+		if symbol == "" {
+			symbol = "MA2509"
+		}
+
+		result := map[string]interface{}{
+			"live":   nil,
+			"shadow": nil,
+		}
+
+		// 读取 live 评分
+		live, err := redis.AIScore(ctx, symbol)
+		if err != nil {
+			// 回退到默认
+			if symbol != "MA2509" {
+				live, err = redis.AIScore(ctx, "MA2509")
+			}
+		}
+		if err == nil {
+			result["live"] = live
+		}
+
+		// 读取 shadow 评分
+		shadowRaw, err := redis.GetString(ctx, "ai_score:"+symbol+":shadow")
+		if err == nil {
+			var shadow map[string]interface{}
+			if err := json.Unmarshal([]byte(shadowRaw), &shadow); err == nil {
+				result["shadow"] = shadow
+			}
+		}
+
+		_ = json.NewEncoder(w).Encode(result)
 	}
 }
 

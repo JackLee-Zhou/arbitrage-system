@@ -59,6 +59,36 @@ func (r *Reader) Services(ctx context.Context) (map[string]json.RawMessage, erro
 	return result, nil
 }
 
+// GetString 读取 Redis 原始字符串值
+func (r *Reader) GetString(ctx context.Context, key string) (string, error) {
+	ctx, cancel := context.WithTimeout(ctx, 2*time.Second)
+	defer cancel()
+
+	raw, err := r.client.Get(ctx, key)
+	if err != nil {
+		return "", fmt.Errorf("redis GET %s: %w", key, err)
+	}
+	if raw == "" {
+		return "", fmt.Errorf("redis key %s not found", key)
+	}
+	return raw, nil
+}
+
+// HGetAll 读取 hash 所有 field-value
+func (r *Reader) HGetAll(ctx context.Context, key string) (map[string]string, error) {
+	ctx, cancel := context.WithTimeout(ctx, 2*time.Second)
+	defer cancel()
+
+	result, err := r.client.HGetAll(ctx, key)
+	if err != nil {
+		return nil, fmt.Errorf("redis HGETALL %s: %w", key, err)
+	}
+	if len(result) == 0 {
+		return nil, fmt.Errorf("redis key %s not found", key)
+	}
+	return result, nil
+}
+
 // Indicator 读取指定 symbol 的最新指标
 func (r *Reader) Indicator(ctx context.Context, symbol string) (map[string]interface{}, error) {
 	key := fmt.Sprintf("indicator:%s:current", symbol)

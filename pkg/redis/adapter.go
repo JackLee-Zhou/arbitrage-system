@@ -170,6 +170,11 @@ func (a *GoRedisAdapter) Ping(ctx context.Context) error {
 	return a.client.Ping(ctx).Err()
 }
 
+// HGetAll 读取 hash 所有 field-value
+func (a *GoRedisAdapter) HGetAll(ctx context.Context, key string) (map[string]string, error) {
+	return a.client.HGetAll(ctx, key).Result()
+}
+
 // Close 释放连接池
 func (a *GoRedisAdapter) Close() error {
 	return a.client.Close()

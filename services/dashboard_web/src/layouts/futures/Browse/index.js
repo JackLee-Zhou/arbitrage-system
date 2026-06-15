@@ -4,6 +4,8 @@
 // ============================================================================
 
 import { useState, useMemo, useCallback } from "react";
+import { useQuery } from "@tanstack/react-query";
+import { emergencyClose, fetchContracts, fetchContractSnapshot } from "api/client";
 import Grid from "@mui/material/Grid";
 import Card from "@mui/material/Card";
 import TextField from "@mui/material/TextField";
@@ -28,19 +30,7 @@ const M = { fontFamily: "'Roboto Mono', 'Courier New', monospace" };
 const INTRA_PERIODS = ["1m", "5m", "15m", "30m", "60m"];
 const KLINE_PERIODS = ["日K", "周K", "月K"];
 
-// ---- Mock data -------------------------------------------------------------
-const CC = [
-  { s: "MA2501", n: "甲醇2501", p: 2524.0, c: 0.65, v: 12500 },
-  { s: "MA2505", n: "甲醇2505", p: 2510.5, c: -0.32, v: 9850 },
-  { s: "MA2509", n: "甲醇2509", p: 2498.0, c: 0.12, v: 6200 },
-  { s: "MA2512", n: "甲醇2512", p: 2485.5, c: -0.55, v: 3100 },
-  { s: "TA2501", n: "PTA2501", p: 5832.0, c: 0.28, v: 15200 },
-  { s: "TA2505", n: "PTA2505", p: 5790.0, c: -0.41, v: 11800 },
-  { s: "TA2509", n: "PTA2509", p: 5750.5, c: 0.05, v: 7200 },
-  { s: "EG2501", n: "乙二醇2501", p: 4680.0, c: 1.20, v: 8900 },
-  { s: "EG2505", n: "乙二醇2505", p: 4655.5, c: -0.78, v: 5400 },
-  { s: "PF2503", n: "短纤2503", p: 7210.0, c: 0.33, v: 4100 },
-];
+// ---- Mock data (orderbook placeholder — real data comes from WebSocket) -----
 
 const MA = [2526, 2525, 2524, 2523, 2522];
 const MB = [2520, 2519, 2518, 2517, 2516];
@@ -69,45 +59,65 @@ function FuturesBrowse() {
   const { positions, selectedSymbol, selectSymbol } = useTradingStore();
   const [ss, setSs] = useState("");
   const [eo, setEo] = useState(false);
+  const [emState, setEmState] = useState({ status: "idle", message: "" });
   const [intraPeriod, setIntraPeriod] = useState("1m");
   const [klinePeriod, setKlinePeriod] = useState("日K");
 
+  const { data: contracts = [], isLoading: contractsLoading } = useQuery({
+    queryKey: ['contracts'],
+    queryFn: fetchContracts,
+    staleTime: 60 * 1000,
+  });
+
+  const { data: snapshot, isLoading: snapshotLoading } = useQuery({
+    queryKey: ['contractSnapshot', selectedSymbol],
+    queryFn: () => fetchContractSnapshot(selectedSymbol),
+    enabled: !!selectedSymbol,
+    staleTime: 10 * 1000,
+  });
+
   const q = ss.toLowerCase().trim();
-  const fd = useMemo(() => q ? CC.filter(c => c.s.toLowerCase().includes(q) || c.n.toLowerCase().includes(q)) : CC, [q]);
+  const fd = useMemo(() => q ? contracts.filter(c => c.symbol.toLowerCase().includes(q) || c.name.toLowerCase().includes(q)) : contracts, [q, contracts]);
   const pl = useMemo(() => Object.values(positions), [positions]);
   const open = !!selectedSymbol;
 
   const dt = useMemo(() => {
     if (!selectedSymbol) return null;
     const pos = positions[selectedSymbol] || null;
-    const mc = CC.find(c => c.s === selectedSymbol);
+    const mc = contracts.find(c => c.symbol === selectedSymbol);
     return {
       s: selectedSymbol,
-      n: mc?.n || selectedSymbol,
-      lp: pos?.lastPrice ?? mc?.p ?? 0,
-      cp: pos?.changePct ?? mc?.c ?? 0,
+      n: mc?.name || selectedSymbol,
+      lp: snapshot?.last_price ? Number(snapshot.last_price) : (pos?.lastPrice || mc?.price || 0),
+      cp: snapshot?.change_pct ? Number(snapshot.change_pct) : (pos?.changePct || mc?.change_pct || 0),
       pos,
       ob: OB,
     };
-  }, [selectedSymbol, positions]);
+  }, [selectedSymbol, positions, contracts, snapshot]);
 
-  const onEm = useCallback(m => {
-    console.log("[EmergencyClose]", { mode: m, symbol: selectedSymbol });
-    setEo(false);
+  const onEm = useCallback(async m => {
+    setEmState({ status: "loading", message: "正在发送平仓指令..." });
+    try {
+      const scope = m === "close_only" ? "single" : "all";
+      await emergencyClose(selectedSymbol, "manual", scope);
+      setEmState({ status: "success", message: `${selectedSymbol} 平仓指令已发送` });
+    } catch (err) {
+      setEmState({ status: "error", message: err.message || "平仓请求失败" });
+    }
   }, [selectedSymbol]);
 
   const onClose = () => selectSymbol(null);
 
   // ---- Contract list row ---------------------------------------------------
   const renderRow = (c) => (
-    <VuiBox key={c.s} sx={rowStyle(selectedSymbol === c.s)} onClick={() => selectSymbol(c.s)}>
+    <VuiBox key={c.symbol} sx={rowStyle(selectedSymbol === c.symbol)} onClick={() => selectSymbol(c.symbol)}>
       <VuiBox>
-        <VuiTypography variant="caption" color="white" fontWeight="medium" sx={M}>{c.s}</VuiTypography>
-        {!open && <VuiTypography variant="caption" color="text" ml={1}>{c.n}</VuiTypography>}
+        <VuiTypography variant="caption" color="white" fontWeight="medium" sx={M}>{c.symbol}</VuiTypography>
+        {!open && <VuiTypography variant="caption" color="text" ml={1}>{c.name}</VuiTypography>}
       </VuiBox>
       <VuiBox sx={{ textAlign: "right" }}>
-        <VuiTypography variant="caption" color="white" fontWeight="medium" sx={M}>{c.p.toFixed(1)}</VuiTypography>
-        {!open && <VuiTypography variant="caption" color={c.c >= 0 ? "success" : "error"} sx={M} ml={1}>{fmtPct(c.c)}</VuiTypography>}
+        <VuiTypography variant="caption" color="white" fontWeight="medium" sx={M}>{c.price.toFixed(1)}</VuiTypography>
+        {!open && <VuiTypography variant="caption" color={c.change_pct >= 0 ? "success" : "error"} sx={M} ml={1}>{fmtPct(c.change_pct)}</VuiTypography>}
       </VuiBox>
     </VuiBox>
   );
@@ -171,27 +181,31 @@ function FuturesBrowse() {
               <VuiBox sx={{ flex: 1, overflowY: "auto" }}>
                 {open
                   // 收缩模式：紧凑列表
-                  ? CC.map(c => (
-                      <VuiBox key={c.s}
-                        sx={{
-                          py: 0.8, px: 0.5, mb: 0.1, borderRadius: "4px", cursor: "pointer",
-                          bgcolor: selectedSymbol === c.s ? "rgba(0,117,255,0.15)" : "transparent",
-                          textAlign: "center",
-                          "&:hover": { bgcolor: "rgba(255,255,255,0.06)" },
-                        }}
-                        onClick={() => selectSymbol(c.s)}
-                      >
-                        <VuiTypography variant="caption" color="white" fontWeight="medium" fontSize="10px" sx={M}>
-                          {c.s.replace(/\d+$/, "")}
-                        </VuiTypography>
-                        <VuiTypography variant="caption" color={c.c >= 0 ? "success" : "error"} fontSize="10px" sx={M}>
-                          {c.p.toFixed(1)}
-                        </VuiTypography>
-                      </VuiBox>
-                    ))
-                  : fd.length === 0
-                    ? <VuiTypography variant="caption" color="text" sx={{ textAlign: "center", py: 4, display: "block" }}>无匹配合约</VuiTypography>
-                    : fd.map(renderRow)
+                  ? contracts.length === 0
+                      ? <VuiTypography variant="caption" color="text" sx={{ textAlign: "center", py: 2, display: "block" }}>加载中...</VuiTypography>
+                      : contracts.map(c => (
+                          <VuiBox key={c.symbol}
+                            sx={{
+                              py: 0.8, px: 0.5, mb: 0.1, borderRadius: "4px", cursor: "pointer",
+                              bgcolor: selectedSymbol === c.symbol ? "rgba(0,117,255,0.15)" : "transparent",
+                              textAlign: "center",
+                              "&:hover": { bgcolor: "rgba(255,255,255,0.06)" },
+                            }}
+                            onClick={() => selectSymbol(c.symbol)}
+                          >
+                            <VuiTypography variant="caption" color="white" fontWeight="medium" fontSize="10px" sx={M}>
+                              {c.symbol.replace(/\d+$/, "")}
+                            </VuiTypography>
+                            <VuiTypography variant="caption" color={c.change_pct >= 0 ? "success" : "error"} fontSize="10px" sx={M}>
+                              {c.price.toFixed(1)}
+                            </VuiTypography>
+                          </VuiBox>
+                        ))
+                  : contractsLoading
+                    ? <VuiTypography variant="caption" color="text" sx={{ textAlign: "center", py: 4, display: "block" }}>加载中...</VuiTypography>
+                    : fd.length === 0
+                      ? <VuiTypography variant="caption" color="text" sx={{ textAlign: "center", py: 4, display: "block" }}>无匹配合约</VuiTypography>
+                      : fd.map(renderRow)
                 }
               </VuiBox>
             </Card>
@@ -219,6 +233,9 @@ function FuturesBrowse() {
                       <VuiTypography variant="button" color={dt.cp >= 0 ? "success" : "error"} fontWeight="medium" sx={M}>
                         {fmtPct(dt.cp)}
                       </VuiTypography>
+                      {snapshotLoading && (
+                        <VuiTypography variant="caption" color="info" sx={M} fontSize="10px" ml={1}>更新中...</VuiTypography>
+                      )}
                     </VuiBox>
                     <IconButton onClick={onClose} size="small"
                       sx={{ color: "#a0aec0", "&:hover": { color: "white", bgcolor: "rgba(255,255,255,0.1)" } }}>
@@ -334,17 +351,23 @@ function FuturesBrowse() {
         {/* ================================================================ */}
         {/* Emergency Dialog */}
         {/* ================================================================ */}
-        <Dialog open={eo} onClose={() => setEo(false)}
+        <Dialog open={eo} onClose={() => { setEo(false); setEmState({ status: "idle", message: "" }); }}
           PaperProps={{ sx: { bgcolor: "#1a1f37", borderRadius: "16px", minWidth: 360, p: 1 } }}>
           <DialogTitle sx={{ color: "#e31a1a", fontWeight: "bold", fontSize: "1.1rem", textAlign: "center" }}>
             紧急平仓确认
           </DialogTitle>
           <DialogContent sx={{ color: "#a0aec0", textAlign: "center", py: 1 }}>
-            请选择平仓操作方式
+            {emState.status !== "idle" ? (
+              <VuiTypography variant="body2" color={emState.status === "loading" ? "info" : emState.status === "success" ? "success" : "error"} fontWeight="bold">
+                {emState.message}
+              </VuiTypography>
+            ) : (
+              "请选择平仓操作方式"
+            )}
           </DialogContent>
           <DialogActions sx={{ justifyContent: "center", gap: 1, pb: 2 }}>
-            <Button variant="outlined" color="error" onClick={() => onEm("close_only")}>仅平本合约</Button>
-            <Button variant="contained" color="error" onClick={() => onEm("close_all_pause")}>全部平仓+暂停</Button>
+            <Button variant="outlined" color="error" disabled={emState.status === "loading"} onClick={() => onEm("close_only")}>仅平本合约</Button>
+            <Button variant="contained" color="error" disabled={emState.status === "loading"} onClick={() => onEm("close_all_pause")}>全部平仓+暂停</Button>
           </DialogActions>
         </Dialog>
       </VuiBox>

@@ -28,6 +28,9 @@ type MockRedisClient struct {
 	getErr        error
 	setFailCount  int // 前 N 次 Set 调用返回错误，0 = 不注入
 	setErr        error
+
+	// hash 存储
+	hash map[string]map[string]string
 }
 
 type mockStreamMsg struct {
@@ -41,6 +44,7 @@ func NewMockClient() *MockRedisClient {
 		kv:      make(map[string]string),
 		streams: make(map[string][]*mockStreamMsg),
 		ttl:     make(map[string]int64),
+		hash:    make(map[string]map[string]string),
 	}
 }
 
@@ -228,6 +232,32 @@ func (m *MockRedisClient) Keys(ctx context.Context, pattern string) ([]string, e
 		result = append(result, k)
 	}
 	return result, nil
+}
+
+// HGetAll mock 实现
+func (m *MockRedisClient) HGetAll(ctx context.Context, key string) (map[string]string, error) {
+	if err := ctx.Err(); err != nil {
+		return nil, err
+	}
+	m.mu.RLock()
+	defer m.mu.RUnlock()
+	h, ok := m.hash[key]
+	if !ok {
+		return map[string]string{}, nil
+	}
+	result := make(map[string]string, len(h))
+	for k, v := range h {
+		result[k] = v
+	}
+	return result, nil
+}
+
+// SetHash 设置 hash field（测试辅助方法）
+func (m *MockRedisClient) SetHash(ctx context.Context, key string, fields map[string]string) error {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	m.hash[key] = fields
+	return nil
 }
 
 // ---- 基础 ----

@@ -78,9 +78,9 @@ export function fetchPositions(symbol) {
   }));
 }
 
-/** GET /api/v1/services — 服务健康状态 */
+/** GET /api/v1/services — 服务注册列表 */
 export function fetchServices() {
-  return api.get('/api/v1/overview').then(data => data.services || {}).catch(() => ({}));
+  return api.get('/api/v1/services').catch(() => ({}));
 }
 
 /** POST /api/v1/emergency_close — 紧急平仓 */
@@ -88,6 +88,39 @@ export function emergencyClose(symbol, reason, scope) {
   return api.post('/api/v1/emergency_close', { symbol, reason, scope }).catch((err) => {
     throw err;
   });
+}
+
+/** GET /api/v1/contracts — 合约列表，可选 ?type=main */
+export function fetchContracts(type) {
+  const params = type ? { type } : {};
+  return api.get('/api/v1/contracts', { params }).catch(() => []);
+}
+
+/** GET /api/v1/contracts/{symbol}/snapshot — 合约快照 */
+export function fetchContractSnapshot(symbol) {
+  return api.get(`/api/v1/contracts/${symbol}/snapshot`).catch(() => null);
+}
+
+/** GET /api/v1/ai/scores/current — AI 评分，可选 ?symbol=xxx */
+export function fetchAIScores(symbol) {
+  const params = symbol ? { symbol } : {};
+  return api.get('/api/v1/ai/scores/current', { params }).catch(() => null);
+}
+
+/** GET /api/v1/strategies — 策略列表 */
+export function fetchStrategies() {
+  return api.get('/api/v1/strategies').then(data => {
+    // Normalize: handler returns StatusResponse or {strategies: [...]}
+    return { strategies: data.strategies || [] };
+  }).catch(() => ({ strategies: [] }));
+}
+
+/** GET /api/v1/risk — 风控参数 */
+export function fetchRiskParams() {
+  return api.get('/api/v1/risk').then(data => {
+    // Normalize: handler returns StatusResponse or {risk_params: {...}}
+    return { risk_params: data.risk_params || {} };
+  }).catch(() => ({ risk_params: {} }));
 }
 
 export default api;

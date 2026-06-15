@@ -1,7 +1,9 @@
-// OPT-306: AI 评分页 — Live + Shadow 评分实时展示
-import { useMemo } from "react";
+// OPT-306: AI 评分页 — Live + Shadow 评分实时展示（接入真实 API）
+import { useQuery } from "@tanstack/react-query";
+import { fetchAIScores } from "api/client";
 import Grid from "@mui/material/Grid";
 import Card from "@mui/material/Card";
+import CircularProgress from "@mui/material/CircularProgress";
 import DashboardLayout from "examples/LayoutContainers/DashboardLayout";
 import DashboardNavbar from "examples/Navbars/DashboardNavbar";
 import VuiBox from "components/VuiBox";
@@ -10,7 +12,6 @@ import VuiBadge from "components/VuiBadge";
 import VuiProgress from "components/VuiProgress";
 const AI_SCORE = "#9D5FFF";
 const AI_STALE = "#FFAB00";
-import useTradingStore from "stores/trading";
 
 const AGE_LABELS = { fresh: "新鲜", stale: "老化", expired: "过期" };
 const AGE_COLORS = { fresh: "#00FF94", stale: AI_STALE, expired: "#FF4D6D" };
@@ -98,8 +99,48 @@ function ScoreCard({ symbol, data }) {
 }
 
 function AIScores() {
-  const { aiScores } = useTradingStore();
-  const entries = useMemo(() => Object.entries(aiScores), [aiScores]);
+  const { data, isLoading, isError } = useQuery({
+    queryKey: ["aiScores", "MA2509"],
+    queryFn: () => fetchAIScores("MA2509"),
+    refetchInterval: 15000,
+  });
+
+  // Transform API response ({ live, shadow }) into ScoreCard entries
+  const entries = [];
+  if (data) {
+    if (data.live) {
+      entries.push(["MA2509 Live", { ...data.live, type: "live" }]);
+    }
+    if (data.shadow) {
+      entries.push(["MA2509 Shadow", { ...data.shadow, type: "shadow" }]);
+    }
+  }
+
+  // Loading state
+  if (isLoading) {
+    return (
+      <DashboardLayout>
+        <DashboardNavbar />
+        <VuiBox py={3} display="flex" justifyContent="center" alignItems="center" minHeight="400px">
+          <CircularProgress sx={{ color: AI_SCORE }} />
+        </VuiBox>
+      </DashboardLayout>
+    );
+  }
+
+  // Error state — no data at all
+  if (isError && entries.length === 0) {
+    return (
+      <DashboardLayout>
+        <DashboardNavbar />
+        <VuiBox py={3}>
+          <Card sx={{ p: 4, textAlign: "center" }}>
+            <VuiTypography variant="body1" color="error">AI 评分服务暂时不可用</VuiTypography>
+          </Card>
+        </VuiBox>
+      </DashboardLayout>
+    );
+  }
 
   return (
     <DashboardLayout>
@@ -122,9 +163,9 @@ function AIScores() {
           </Card>
         ) : (
           <Grid container spacing={3}>
-            {entries.map(([symbol, data]) => (
+            {entries.map(([symbol, scoreData]) => (
               <Grid item xs={12} md={6} xl={4} key={symbol}>
-                <ScoreCard symbol={symbol} data={data} />
+                <ScoreCard symbol={symbol} data={scoreData} />
               </Grid>
             ))}
           </Grid>

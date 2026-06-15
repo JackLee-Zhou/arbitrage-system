@@ -59,6 +59,10 @@ type RedisClient interface {
 	// start 为起始 ID，通常使用 "$"（最新消息）或 "0"（所有消息）
 	XGroupCreate(ctx context.Context, stream, group, start string) error
 
+	// ---- Hash 操作 ----
+	// HGetAll 读取 hash 所有 field-value
+	HGetAll(ctx context.Context, key string) (map[string]string, error)
+
 	// ---- key 管理 ----
 	// Expire 设置 key 的 TTL（秒）
 	// 用于非 KV 类型 key（如 Stream key）设置过期时间

@@ -4,12 +4,15 @@
 // ============================================================================
 
 import { useState } from "react";
+import { useQuery } from "@tanstack/react-query";
+import { fetchStrategies } from "api/client";
 import DashboardLayout from "examples/LayoutContainers/DashboardLayout";
 import DashboardNavbar from "examples/Navbars/DashboardNavbar";
 import VuiBox from "components/VuiBox";
 import VuiTypography from "components/VuiTypography";
+import VuiButton from "components/VuiButton";
 import Table from "examples/Tables/Table";
-import { Card, Tabs, Tab, Switch } from "@mui/material";
+import { Card, Tabs, Tab, Switch, CircularProgress } from "@mui/material";
 
 const columns = [
   { name: "name", align: "left" },
@@ -41,14 +44,28 @@ const ReturnCell = ({ v }) => {
 
 const ToggleBtn = () => <Switch disabled size="small" defaultChecked color="success" />;
 
-const rows = [
-  { name: "MA 趋势追踪 v1", symbol: "MA509", type: "趋势跟踪", status: <StatusBadge s="LIVE" />, enabled: <ToggleBtn />, created: "2026-03-15", return: <ReturnCell v="+8.32%" /> },
-  { name: "MA 均线交叉 v2", symbol: "MA509", type: "均值回归", status: <StatusBadge s="SHADOW" />, enabled: <ToggleBtn />, created: "2026-04-01", return: <ReturnCell v="+2.15%" /> },
-  { name: "跨期套利 v1", symbol: "MA509/MA601", type: "套利", status: <StatusBadge s="SHADOW" />, enabled: <ToggleBtn />, created: "2026-05-10", return: <ReturnCell v="-1.47%" /> },
-];
+function strategyToRow(s) {
+  return {
+    name: s.name || "-",
+    symbol: s.symbol || "-",
+    type: s.type || "-",
+    status: <StatusBadge s={s.status || "UNKNOWN"} />,
+    enabled: <ToggleBtn />,
+    created: s.created_at ? s.created_at.slice(0, 10) : "-",
+    return: <ReturnCell v={s.pnl || "0.00%"} />,
+  };
+}
 
 function ManageStrategies() {
   const [tab, setTab] = useState(0);
+  const { data, isLoading, isError, error } = useQuery({
+    queryKey: ["strategies"],
+    queryFn: fetchStrategies,
+  });
+
+  const strategies = data?.strategies || [];
+  const rows = strategies.map(strategyToRow);
+
   return (
     <DashboardLayout>
       <DashboardNavbar />
@@ -62,12 +79,41 @@ function ManageStrategies() {
         </Card>
         {tab === 0 ? (
           <Card sx={{ overflow: "hidden" }}>
-            <VuiBox sx={{
-              "& th": { borderBottom: ({ borders: { borderWidth }, palette: { grey } }) => `${borderWidth[1]} solid ${grey[700]}` },
-              "& .MuiTableRow-root:not(:last-child) td": { borderBottom: ({ borders: { borderWidth }, palette: { grey } }) => `${borderWidth[1]} solid ${grey[700]}` },
-            }}>
-              <Table columns={columns} rows={rows} />
-            </VuiBox>
+            {/* ---- Loading ---- */}
+            {isLoading && (
+              <VuiBox display="flex" justifyContent="center" alignItems="center" minHeight={200}>
+                <CircularProgress color="info" />
+              </VuiBox>
+            )}
+
+            {/* ---- Error ---- */}
+            {isError && (
+              <VuiBox display="flex" flexDirection="column" alignItems="center" justifyContent="center" minHeight={200} px={3}>
+                <VuiTypography variant="body2" color="error" mb={2}>
+                  加载策略列表失败：{error?.message || "未知错误"}
+                </VuiTypography>
+                <VuiButton variant="outlined" color="info" size="small" onClick={() => window.location.reload()}>
+                  重试
+                </VuiButton>
+              </VuiBox>
+            )}
+
+            {/* ---- Empty ---- */}
+            {!isLoading && !isError && strategies.length === 0 && (
+              <VuiBox display="flex" alignItems="center" justifyContent="center" minHeight={200}>
+                <VuiTypography variant="body1" color="text">暂无策略数据</VuiTypography>
+              </VuiBox>
+            )}
+
+            {/* ---- Table ---- */}
+            {!isLoading && !isError && strategies.length > 0 && (
+              <VuiBox sx={{
+                "& th": { borderBottom: ({ borders: { borderWidth }, palette: { grey } }) => `${borderWidth[1]} solid ${grey[700]}` },
+                "& .MuiTableRow-root:not(:last-child) td": { borderBottom: ({ borders: { borderWidth }, palette: { grey } }) => `${borderWidth[1]} solid ${grey[700]}` },
+              }}>
+                <Table columns={columns} rows={rows} />
+              </VuiBox>
+            )}
           </Card>
         ) : (
           <Card sx={{ p: 3, textAlign: "center", display: "flex", alignItems: "center", justifyContent: "center", minHeight: 200 }}>

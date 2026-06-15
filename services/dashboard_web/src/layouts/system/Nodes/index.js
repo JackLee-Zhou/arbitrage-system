@@ -3,17 +3,19 @@
 // ============================================================================
 
 import { useMemo } from "react";
+import { useQuery } from '@tanstack/react-query';
 import Grid from "@mui/material/Grid";
 import Card from "@mui/material/Card";
 import Box from "@mui/material/Box";
 import Tooltip from "@mui/material/Tooltip";
+import CircularProgress from "@mui/material/CircularProgress";
 
 import DashboardLayout from "examples/LayoutContainers/DashboardLayout";
 import DashboardNavbar from "examples/Navbars/DashboardNavbar";
 import VuiBox from "components/VuiBox";
 import VuiTypography from "components/VuiTypography";
 
-import useSystemStore from "stores/system";
+import { fetchServices } from 'api/client';
 
 const SERVICE_NAMES = [
   "redis",
@@ -78,7 +80,11 @@ function formatLastCheck(service) {
 }
 
 function SystemNodes() {
-  const { services } = useSystemStore();
+  const { data: services = {}, isLoading } = useQuery({
+    queryKey: ['services'],
+    queryFn: fetchServices,
+    refetchInterval: 15000,
+  });
 
   const serviceCards = useMemo(
     () =>
@@ -139,12 +145,17 @@ function SystemNodes() {
               }}
             />
             <VuiTypography variant="button" color="white" fontWeight="bold">
-              {onlineCount}/{totalServices} 在线
+              {isLoading ? "加载中..." : `${onlineCount}/${totalServices} 在线`}
             </VuiTypography>
           </Box>
         </VuiBox>
 
-        <Grid container spacing={3}>
+        {isLoading ? (
+          <VuiBox display="flex" justifyContent="center" alignItems="center" minHeight="40vh">
+            <CircularProgress color="info" />
+          </VuiBox>
+        ) : (
+          <Grid container spacing={3}>
           {serviceCards.map(({ name, displayName, status, lastCheck }) => (
             <Grid item xs={12} md={6} xl={4} key={name}>
               <Card
@@ -203,6 +214,7 @@ function SystemNodes() {
             </Grid>
           ))}
         </Grid>
+        )}
       </VuiBox>
     </DashboardLayout>
   );

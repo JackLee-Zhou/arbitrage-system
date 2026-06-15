@@ -143,6 +143,109 @@ Dashboard 顶栏右侧持仓显示 + 合约浏览页持仓详情需要实时持�
 
 ---
 
+### REQ-004 GET /api/v1/contracts + /contracts/{symbol}/snapshot 🟡 P1
+
+**请求方**：dashboard_web (OPT-303 合约浏览页)
+**登记时间**：2026-06-15
+**状态**：[x] 已实现
+
+**场景**：合约浏览页左列表需要全市场合约元数据+最新价，详情卡片需要单合约实时快照。
+
+**接口**：
+- `GET /api/v1/contracts` → `[{symbol, name, exchange, price, change_pct, volume, is_main}]`
+- `GET /api/v1/contracts/{symbol}/snapshot` → `{symbol, name, last_price, open, high, low, change_pct, volume, open_interest, updated_at}`
+- 数据源：Redis `instruments:all` + `last_price:<symbol>`
+
+**实现摘要**：
+- 实现位置：`services/orchestrator/cmd/main.go` — route registration；`services/orchestrator/internal/api/rest/handlers.go` — `makeContractsHandler` / `makeContractSnapshotHandler`
+- 数据源：Redis `instruments:all`（ctp_tick 通过 OPT-201 写入合约元数据）+ `last_price:<symbol>`（ctp_tick 通过 OPT-202 写入最新价快照，60s TTL）
+- 边界：未知 symbol 返回 `{"error":"symbol not found"}` 404；Redis 无数据返回空数组
+- 下游依赖：ctp_tick `adapters/metadata/metadata_writer.go` + `adapters/redis/snapshot_writer.go`
+
+---
+
+### REQ-005 GET /api/v1/ai/scores/current 🟡 P1
+
+**请求方**：dashboard_web (OPT-306 AI评分页)
+**登记时间**：2026-06-15
+**状态**：[x] 已实现
+
+**场景**：AI 评分页需要当前 live+shadow 评分数据。
+
+**接口**：
+- `GET /api/v1/ai/scores/current?symbol=MA2509` → `{symbol, score, confidence, label, horizon, regime, key_drivers, model_chain, timestamp, type, expires_at}`
+- 数据源：Redis `ai_score:<symbol>:live` + `ai_score:<symbol>:shadow`
+
+**实现摘要**：
+- 实现位置：`services/orchestrator/cmd/main.go` — route registration；`services/orchestrator/internal/api/rest/handlers.go` — `makeScoresHandler`
+- 数据源：Redis `ai_score:<symbol>:live` / `ai_score:<symbol>:shadow`，通过 `internal/adapters/redis/reader.go` `AIScore()` 方法读取
+- 边界：Redis 无数据时返回 `{"error":"no ai score available"}`；`symbol` 参数为空时默认返回 MA2509
+- 下游依赖：llm_scorer 服务写入 AI 评分到 Redis
+
+---
+
+### REQ-006 GET /api/v1/services 🟡 P1
+
+**请求方**：dashboard_web (OPT-307 系统监控页)
+**登记时间**：2026-06-15
+**状态**：[x] 已实现
+
+**场景**：系统节点状态页需要 9 个服务的健康详情。
+
+**接口**：
+- `GET /api/v1/services` → `{services: {name: {status, last_check, version, uptime}}}`
+- 数据源：HealthPoller.Snapshot()
+
+**实现摘要**：
+- 实现位置：`services/orchestrator/cmd/main.go` — route registration；`services/orchestrator/internal/api/rest/handlers.go` — `makeServicesHandler`
+- 数据源：`internal/adapters/health_poller.go` `HealthPoller.Snapshot()` — 从 Redis `services:*` 发现注册服务，周期性探测 `/healthz` 缓存结果（15s 间隔）
+- 边界：无注册服务返回空数组 `{"services": []}`
+- 下游依赖：各服务通过 `pkg/registry` 向 Redis 注册 `services:*` 键
+
+---
+
+### REQ-007 POST /api/v1/emergency_close 对接 🟡 P1
+
+**请求方**：dashboard_web (OPT-303 紧急平仓按钮)
+**登记时间**：2026-06-15
+**状态**：[x] 已实现
+
+**场景**：合约浏览页紧急平仓按钮需调用真实平仓接口。orchestrator 端已实现，dashboard 端需接入。
+
+**接口**：
+- `POST /api/v1/emergency_close` — body: `{symbol, reason, scope: "single"|"all"}`
+- dashboard 端：替换 `console.log` → `emergencyClose()` API 调用
+
+**实现摘要**：
+- 实现位置：`services/orchestrator/cmd/main.go` — `makeEmergencyCloseHandler` (line 270)
+- gRPC 调用链：orchestrator → trading_agent `EmergencyClose()` → Broker → CTP
+- 审计日志：每次平仓操作记录到 `audit_log`（`domain.AuditEntry`）
+- 边界：trading_agent 断连时返回 503 `{"error":"trading_agent not connected"}`；非法请求体返回 400
+- 交易时段守卫：紧急平仓豁免守卫，任何时间允许（`TradingSessionGuard` 白名单）
+
+---
+
+### REQ-008 GET /api/v1/strategies + /api/v1/risk/params 🟢 P2
+
+**请求方**：dashboard_web (OPT-308 管理页)
+**登记时间**：2026-06-15
+**状态**：[x] 已实现
+
+**场景**：管理页需要策略列表+风控参数（V1 只读）。
+
+**接口**：
+- `GET /api/v1/strategies` → 已有 handler，需增强返回格式
+- `GET /api/v1/risk/params` → 已有 handler，需增强返回格式
+
+**实现摘要**：
+- 实现位置：`services/orchestrator/cmd/main.go` — `makeStrategiesHandler` (line 312) + `makeRiskHandler` (line 373)
+- gRPC 调用链：orchestrator → trading_agent `GetStatus()` 返回策略状态和风控参数
+- 审计日志：修改型操作（新增/暂停/恢复策略、修改风控参数）记录到 `audit_log`
+- 边界：trading_agent 断连时返回空数据 `{"strategies":[]}` / `{"risk_params":{}}`，不报 500
+- 交易时段守卫：修改型操作由 `TradingSessionGuard` 中间件拦截，只读 GET 豁免
+
+---
+
 <!-- ==================== REQ 区域结束 ==================== -->
 
 ---
