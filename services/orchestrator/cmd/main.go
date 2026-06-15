@@ -23,6 +23,7 @@ import (
 	"github.com/arbitrage-system/orchestrator/internal/adapters/trading_client"
 	"github.com/arbitrage-system/orchestrator/internal/api"
 	"github.com/arbitrage-system/orchestrator/internal/api/rest"
+	"github.com/arbitrage-system/orchestrator/internal/api/websocket"
 	"github.com/arbitrage-system/orchestrator/internal/domain"
 )
 
@@ -72,6 +73,32 @@ func main() {
 		log.Fatalf("[orchestrator] service registration failed: %v", err)
 	}
 
+	// WebSocket Hub
+	wsHub := websocket.NewHub()
+
+	// Snapshot provider: aggregates current state for new WS clients
+	wsHub.SnapshotProvider = func() map[string]interface{} {
+		ctx := context.Background()
+		snap := map[string]interface{}{
+			"system_status": map[string]interface{}{
+				"mode":     "normal",
+				"services": healthPoller.Snapshot(),
+			},
+		}
+		if tradingClient != nil {
+			if pos, err := tradingClient.GetPositions(ctx); err == nil {
+				snap["positions"] = pos
+			}
+		} else if pos, err := redisReader.Position(ctx); err == nil {
+			snap["positions"] = pos
+		}
+		if score, err := redisReader.AIScore(ctx, "MA2509"); err == nil {
+			snap["scores"] = score
+		}
+		return snap
+	}
+	go wsHub.Run()
+
 	// HTTP Handler
 	mux := http.NewServeMux()
 
@@ -99,7 +126,7 @@ func main() {
 	mux.HandleFunc("/api/v1/emergency_close", makeEmergencyCloseHandler(tradingClient, auditWriter))
 	mux.HandleFunc("/api/v1/strategies", makeStrategiesHandler(tradingClient, auditWriter))
 	mux.HandleFunc("/api/v1/risk", makeRiskHandler(tradingClient, auditWriter))
-	mux.HandleFunc("/ws", handleWebSocket)
+	mux.HandleFunc("/ws", wsHub.HandleUpgrade)
 
 	// 中间件链：日志 → 交易时段守卫
 	handler := withMiddleware(mux)
@@ -153,19 +180,38 @@ func makeOverviewHandler(redis *redisreader.Reader, trading *trading_client.Clie
 	return func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
 		ctx := r.Context()
+
 		result := map[string]interface{}{
-			"service":  "orchestrator",
-			"status":   "ok",
-			"services": health.Snapshot(),
+			"status":      "ok",
+			"system_mode": "normal",
+			"services":    health.Snapshot(),
+			"today_stats": map[string]interface{}{
+				"orders": 0,
+				"trades": 0,
+				"pnl":    0.0,
+			},
 		}
+
+		// AI Score
 		if score, err := redis.AIScore(ctx, "MA2509"); err == nil {
 			result["ai_score"] = score
 		}
+
+		// Engine status + positions from trading_agent
 		if trading != nil {
 			if status, err := trading.GetStatus(ctx); err == nil {
 				result["engine"] = status
 			}
+			if positions, err := trading.GetPositions(ctx); err == nil {
+				result["positions"] = positions
+			}
+		} else {
+			// Redis fallback for positions
+			if pos, err := redis.Position(ctx); err == nil {
+				result["positions"] = pos
+			}
 		}
+
 		_ = json.NewEncoder(w).Encode(result)
 	}
 }
@@ -173,18 +219,52 @@ func makeOverviewHandler(redis *redisreader.Reader, trading *trading_client.Clie
 func makePositionsHandler(redis *redisreader.Reader, trading *trading_client.Client) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
+		ctx := r.Context()
+		symbol := r.URL.Query().Get("symbol")
+
+		var raw interface{}
 		if trading != nil {
-			if positions, err := trading.GetPositions(r.Context()); err == nil {
-				_ = json.NewEncoder(w).Encode(positions)
-				return
+			if positions, err := trading.GetPositions(ctx); err == nil {
+				raw = positions
 			}
 		}
-		if pos, err := redis.Position(r.Context()); err == nil {
-			_ = json.NewEncoder(w).Encode(pos)
+		if raw == nil {
+			if pos, err := redis.Position(ctx); err == nil {
+				raw = pos
+			}
+		}
+		if raw == nil {
+			_ = json.NewEncoder(w).Encode(map[string]interface{}{"positions": []interface{}{}})
 			return
 		}
-		_ = json.NewEncoder(w).Encode(map[string]interface{}{"positions": []interface{}{}})
+
+		// If symbol filter requested, extract single position
+		if symbol != "" {
+			_ = json.NewEncoder(w).Encode(filterPosition(raw, symbol))
+			return
+		}
+
+		_ = json.NewEncoder(w).Encode(raw)
 	}
+}
+
+// filterPosition extracts a single position by symbol from gRPC/Redis response
+func filterPosition(raw interface{}, symbol string) interface{} {
+	// Handle map[string]interface{} with "positions" key (gRPC format)
+	if m, ok := raw.(map[string]interface{}); ok {
+		if positions, ok := m["positions"]; ok {
+			if arr, ok := positions.([]interface{}); ok {
+				for _, p := range arr {
+					if pm, ok := p.(map[string]interface{}); ok {
+						if pm["symbol"] == symbol {
+							return pm
+						}
+					}
+				}
+			}
+		}
+	}
+	return raw
 }
 
 func makeEmergencyCloseHandler(trading *trading_client.Client, audit *audit_writer.Writer) http.HandlerFunc {
@@ -335,11 +415,6 @@ func makeRiskHandler(trading *trading_client.Client, audit *audit_writer.Writer)
 			http.Error(w, `{"error":"method not allowed"}`, http.StatusMethodNotAllowed)
 		}
 	}
-}
-
-func handleWebSocket(w http.ResponseWriter, r *http.Request) {
-	w.Header().Set("Content-Type", "application/json")
-	_, _ = w.Write([]byte(`{"status":"websocket not yet implemented"}`))
 }
 
 func withMiddleware(next http.Handler) http.Handler {

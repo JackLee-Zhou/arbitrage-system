@@ -52,7 +52,79 @@
 
 <!-- ==================== REQ 区域开始 ==================== -->
 
-_（暂无登记。dashboard agent 发现接口缺口时往这里加。）_
+### REQ-001 GET /api/v1/overview 增强 🟡 P1
+
+**请求方**：dashboard_web (OPT-302 概览首页)
+**登记时间**：2026-06-15
+**状态**：[~] 实现中 (claude @ 2026-06-15)
+
+**场景**：
+概览首页四区卡片需要：系统健康状态、当前持仓汇总、AI 评分、实时事件流。当前 handler 只返回 services + ai_score + engine 基础字段，缺少 todayStats（今日委托/成交/盈亏汇总）。
+
+**需要的接口**：
+- 路径：`GET /api/v1/overview`
+- 响应格式：
+  ```json
+  {
+    "status": "ok",
+    "system_mode": "normal",
+    "services": { "ctp_tick": "healthy", ... },
+    "positions": { "count": 2, "total_pnl": 234.5 },
+    "ai_score": { "MA2509": { "score": 62, "confidence": 0.8, "label": "bullish", "timestamp": "..." } },
+    "today_stats": { "orders": 5, "trades": 3, "pnl": 120.0 }
+  }
+  ```
+- 边界情况：trading_agent 断连时 engine 字段为 null，不报 500
+
+**关联**：OPT-302
+
+---
+
+### REQ-002 WebSocket /ws 实时推送 🟡 P1
+
+**请求方**：dashboard_web (全局实时数据)
+**登记时间**：2026-06-15
+**状态**：[~] 实现中 (claude @ 2026-06-15)
+
+**场景**：
+Dashboard 所有页面需要实时数据推送：价格更新、持仓变化、AI 评分更新、告警事件。当前 /ws 返回 "not yet implemented" 占位字符串。
+
+**需要的接口**：
+- 端点：`GET /ws`（WebSocket upgrade）
+- 协议：JSON 帧，`{ "type": "snapshot"|"delta"|"event", "channel": "...", "ts": 123, "data": {...} }`
+- 频道：system_status, positions, scores, alerts, contract:<symbol>
+- 客户端命令：subscribe/unsubscribe
+- 推送频率：delta 1Hz 节流，event 实时
+- 边界情况：断线自动清理订阅，30s 无心跳主动关闭
+
+**关联**：OPT-302/303/306/307
+
+---
+
+### REQ-003 GET /api/v1/positions 增强 🟡 P1
+
+**请求方**：dashboard_web (持仓固定栏 + 合约浏览页)
+**登记时间**：2026-06-15
+**状态**：[~] 实现中 (claude @ 2026-06-15)
+
+**场景**：
+Dashboard 顶栏右侧持仓显示 + 合约浏览页持仓详情需要实时持仓数据。当前 handler 已有基本实现（gRPC → Redis 兜底），需增加按 symbol 查询参数。
+
+**需要的接口**：
+- 路径：`GET /api/v1/positions` 和 `GET /api/v1/positions?symbol=MA2509`
+- 响应格式：
+  ```json
+  {
+    "positions": [
+      { "symbol": "MA2509", "direction": "long", "volume": 1, "open_price": 2342, "current_price": 2350, "float_pnl": 80, "float_pnl_pct": 0.34 }
+    ]
+  }
+  ```
+- 边界情况：无持仓返回空数组 `{"positions": []}`
+
+**关联**：OPT-301/303
+
+---
 
 <!-- ==================== REQ 区域结束 ==================== -->
 
