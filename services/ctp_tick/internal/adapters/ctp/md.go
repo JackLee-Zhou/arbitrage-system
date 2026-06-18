@@ -45,10 +45,10 @@ type MdAPI struct {
 	connected chan struct{} // OnFrontConnected 信号
 	loggedIn  chan error    // OnRspUserLogin 信号
 
-	disconnectTimes  []time.Time
-	disconnectMu     sync.Mutex
-	reconnectTimer   *time.Timer // 重连定时器（Close 时可取消）
-	tradingDay       string
+	disconnectTimes []time.Time
+	disconnectMu    sync.Mutex
+	reconnectTimer  *time.Timer // 重连定时器（Close 时可取消）
+	tradingDay      string
 
 	mu sync.RWMutex
 }
