@@ -1,4 +1,7 @@
 // trading_agent/domain/indicator — 量比 / 动量指标
+// TODO(M10): 改为 VolumeRatio/Momentum/OneSidedRatio 各自实现 Indicator 接口，
+//
+//	支持从 YAML 配置动态加载参数。见 ma.go 顶部 TODO 说明。
 package indicator
 
 // VolumeRatio 量比 = 最近 N 根 K 线平均成交量 / 过去 M 根 K 线平均成交量

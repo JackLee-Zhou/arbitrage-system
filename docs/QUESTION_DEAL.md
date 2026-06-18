@@ -30,6 +30,7 @@
 | 2 | 2026-06-13 | golangci-lint v2 配置格式不兼容 v1：必须加 `version: "2"` + linters/formatters 分离 + issues → exclusions 迁移 | 所有 Go 服务 | ✅ 已修复 (.golangci.yml) |
 | 3 | 2026-06-14 | 🔴 orchestrator ↔ trading_agent gRPC 依赖：orchestrator 当前用 rawCodec（JSON 透传），待 trading_agent 开发时 `make gen` 生成 proto stub 后切换。trading_agent 须实现 SubscribeStateChanges RPC（server stream），orchestrator 端 stream.go 已预留接口 | orchestrator + trading_agent | open |
 | 3 | 2026-06-13 | `interface{}` 返回类型导致 `.Close()` 编译错误：Go 不支持对 `interface{}` 直接调用方法 | 所有返回 `interface{}` 的桩代码 | ✅ 已修复 (ctp_tick cmd/main.go) |
+| 4 | 2026-06-17 | 架构评审决策：9→8 服务，watchdog 合并到 orchestrator（OPT-400）。db_writer 保留（统一 InfluxDB 写入网关）、intel_collector 保留（可能部署到香港）。详见 OPTIMIZATIONS.md 第六章 | 全局 | ✅ 已决策 |
 
 ---
 

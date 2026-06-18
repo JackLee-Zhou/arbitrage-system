@@ -1,4 +1,7 @@
 // trading_agent/domain/indicator — 布林带计算
+// TODO(M10): 改为 BollingerBand 实现 Indicator 接口，支持从 YAML 配置动态加载参数。
+//
+//	见 ma.go 顶部 TODO 说明。
 package indicator
 
 import "math"

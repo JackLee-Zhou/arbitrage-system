@@ -1,5 +1,15 @@
 // trading_agent/domain/indicator — 技术指标计算
 // 注意：本包零外部依赖，只做纯数学计算
+//
+// TODO(M10): 当前所有指标为硬编码函数，直接由调用方传参。
+//
+//	P3 阶段需改为 Indicator 接口 + 注册表模式：
+//	  type Indicator interface {
+//	      Name() string
+//	      Calculate(prices []float64, params map[string]float64) (float64, error)
+//	  }
+//	引擎根据 Redis 中的 YAML 配置动态加载指标列表，按名称从注册表取出执行。
+//	参考 strategy 包的 Strategy 接口设计。
 package indicator
 
 // SMA 简单移动平均

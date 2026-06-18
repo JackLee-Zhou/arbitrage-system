@@ -637,10 +637,158 @@
 
 ---
 
-## 六、其他已识别的优化（开放区）
+## 六、服务合并 / 精简（v1.3 架构评审提出）
+
+> 2026-06-17 架构评审结论：9 个服务对当前阶段偏重，但需保留后期扩展能力。
+> 经讨论确定合并 1 个（watchdog → orchestrator），保留 8 个服务的最终架构。
+
+### 决策记录：服务拆分边界（2026-06-17）
+
+**讨论背景**：9 个服务跑在 4C8G 机器上，运维复杂度偏高。评估哪些可以合并。
+
+**最终决定：9 → 8（仅合并 watchdog）**
+
+| 服务 | 决定 | 理由 |
+|---|---|---|
+| watchdog → orchestrator | ✅ 合并 | 纯监控逻辑（轮询 healthz + 推钉钉），天然归属编排层 |
+| db_writer | ❌ 保留独立 | 统一 InfluxDB 写入网关，未来 trading_agent/orchestrator/llm_scorer 都可能写数据，保持串行化 |
+| intel_collector | ❌ 保留独立 | 可能部署到香港（部分新闻源国内云节点无法访问），网络拓扑独立 |
+| llm_scorer | ❌ 保留独立 | 部署在国内（调 DeepSeek/GLM API），与 intel_collector 解耦 |
+
+**8 个服务的最终架构**：
+
+```
+ctp_tick          ← 行情采集（纯生产者）
+db_writer         ← InfluxDB 统一写入网关
+trading_agent     ← 决策核心
+orchestrator      ← 编排层 + 健康监控 + 钉钉告警
+llm_scorer        ← LLM 评分
+intel_collector   ← 舆情采集（可选香港部署）
+dashboard_web     ← 前端
+stock_tick        ← V2 占位
+```
+
+**后期扩展路径**：
+- 如果 orchestrator 变得太重（REST + WebSocket + 告警 + 未来更多），可将监控再次拆出
+- 如果 db_writer 接入多生产者后逻辑变复杂，可按 bucket 类型拆分 writer
+- 如果 AI pipeline 需要多模型并行 / A/B 测试，可将 llm_scorer 拆出独立 scorer
+
+### OPT-400 watchdog 合并到 orchestrator 🟡 P1
+
+**背景**：watchdog 的唯一职责是轮询 8 个服务的 `/healthz` + 推钉钉告警。orchestrator 作为编排层天然知道所有服务的存在，且已有 healthz 相关逻辑。合并后减少一个容器、一份服务注册、一份独立部署配置。
+
+**目标**：把 watchdog 的健康巡检 + 钉钉告警功能并入 orchestrator，删除 watchdog 服务。
+
+**拆解**：
+- [ ] **OPT-400-a** 在 orchestrator 内部新增 `internal/monitor/` 包
+  - `health_checker.go`：定时轮询各服务 `/healthz`（复用 watchdog 的轮询逻辑）
+  - `dingtalk.go`：钉钉 webhook 告警推送
+  - `alert_rules.go`：告警规则（服务不健康 / 内存超限 / CTP 断线等）
+- [ ] **OPT-400-b** orchestrator 启动时注册 monitor goroutine
+  - 轮询间隔：10 秒（与原 watchdog 一致）
+  - 告警去抖：同一服务同一告警 5 分钟内不重复推送
+- [ ] **OPT-400-c** orchestrator 新增配置项
+  - `DINGTALK_WEBHOOK_URL`：钉钉 webhook 地址
+  - `MONITOR_INTERVAL_SEC`：巡检间隔（默认 10）
+  - `MONITOR_ALERT_COOLDOWN_SEC`：告警去抖间隔（默认 300）
+- [ ] **OPT-400-d** 迁移 watchdog 的 unit 测试到 orchestrator
+  - `internal/monitor/health_checker_test.go`
+  - `internal/monitor/dingtalk_test.go`
+  - `internal/monitor/alert_rules_test.go`
+- [ ] **OPT-400-e** 更新 orchestrator README
+  - 新增「健康监控 + 钉钉告警」职责说明
+  - 登记新增的环境变量
+  - 更新依赖列表（钉钉 webhook）
+- [ ] **OPT-400-f** 更新 `docker-compose.yml`
+  - 删除 watchdog 服务定义
+  - orchestrator 环境变量加入钉钉配置
+- [ ] **OPT-400-g** 更新 `docs/QUESTION_DEAL.md`
+  - watchdog 状态改为「已合并」
+- [ ] **OPT-400-h** 删除 `services/watchdog/` 目录（最后一步，确认无其他引用后）
+
+**Acceptance Criteria**：
+- orchestrator 启动后能轮询所有服务的 `/healthz`
+- 服务不健康时钉钉收到告警（与原 watchdog 行为一致）
+- 告警去抖：同一告警 5 分钟内不重复
+- `docker compose up` 后只有 8 个容器（无 watchdog）
+- orchestrator unit 测试全部通过
+
+**风险**：
+- ⚠️ orchestrator 变重：合并后 orchestrator 承担 REST + WebSocket + gRPC + 健康监控，需关注内存
+- ⚠️ 告警延迟：orchestrator 本身不健康时无法自监控 → 依赖外部存活探针（如阿里云健康检查）
+
+**关联**：
+- `services/watchdog/README.md`
+- `services/orchestrator/README.md`
+- `docker-compose.yml`
+
+---
+
+## 七、其他已识别的优化（开放区）
 
 > 这一区域用来记录在开发过程中发现但还没立即处理的优化机会。
 > 任何 agent 在写代码时发现"这块以后可以优化"，都可以在这里加一条 OPT-XXX。
+
+### OPT-500 llm_scorer 多 Agent 架构改造 🟡 P1
+
+**背景**：当前 llm_scorer 使用单次 LLM 调用完成综合评分，各分析维度互相干扰，无法独立优化。需要改为多 Agent 并行分析 + 汇总模式，提升分析准确性。
+
+**技术选型**：OpenAI Agents SDK + DeepSeek API（DeepSeek 提供 OpenAI 兼容 API）。
+
+**目标**：将 llm_scorer 从单次调用改为 3 个专精 Agent 并行分析 + 1 个汇总 Agent 交叉验证。
+
+**详细设计**：[`services/llm_scorer/MULTI_AGENT_DESIGN.md`](services/llm_scorer/MULTI_AGENT_DESIGN.md)
+
+**拆解**：
+
+- [ ] **OPT-500-a** 验证 DeepSeek + OpenAI Agents SDK 兼容性（1 天）
+  - 安装 openai-agents
+  - 写最小 demo：单 Agent 调用 + function calling + 并发调用
+  - 记录兼容性问题
+- [ ] **OPT-500-b** 定义 3 个专精 Agent + 工具函数（2 天）
+  - sentiment_agent：舆情分析（prompt + tools）
+  - fundamental_agent：基本面分析（prompt + tools）
+  - technical_agent：技术面分析（prompt + tools）
+  - tools.py：get_latest_news / get_fundamentals / get_technical_indicators
+- [ ] **OPT-500-c** 实现并行编排 + 汇总 Agent（1 天）
+  - runner.py：asyncio.gather 并行 + aggregator 串行汇总
+  - aggregator Agent：加权汇总 + 交叉验证
+- [ ] **OPT-500-d** 接入 llm_gateway 二级熔断（0.5 天）
+  - 适配 OpenAI Agents SDK 的 client 初始化
+  - 保留 DeepSeek → GLM → 停机告警链路
+- [ ] **OPT-500-e** 实现 Guardrails（0.5 天）
+  - 交易时段校验（非交易时段跳过）
+  - symbol 合法性校验
+- [ ] **OPT-500-f** Token 优化（1 天）
+  - 分层调用：快速筛选 → 深度分析
+  - 缓存：5 分钟内相同输入不重复调用
+  - 降级策略：超时/限流时退回单次调用
+- [ ] **OPT-500-g** 单元测试（1 天）
+  - test_sentiment_agent.py / test_fundamental_agent.py / test_technical_agent.py
+  - test_aggregator.py / test_runner.py
+  - 用 mock LLM，不依赖真 API
+- [ ] **OPT-500-h** 更新文档（0.5 天）
+  - 更新 llm_scorer/README.md
+  - 更新 llm_scorer/QUESTION.md
+
+**Acceptance Criteria**：
+- 3 个 Agent 并行分析 + 汇总正常工作
+- 最终评分写入 `ai_score:MA2509:live` 和 `shadow`（对外契约不变）
+- 单轮评分 < 30s（含 4 次 LLM 调用）
+- Token 消耗：优化后 ≤ 5,000 token/次（对比单次调用 ~2,000）
+- 降级模式：超时 45s 自动退回单次调用
+- Unit 测试全部通过
+
+**风险**：
+- ⚠️ DeepSeek 对 OpenAI Agents SDK 兼容不完整 → 退回 PydanticAI + asyncio.gather
+- ⚠️ Token 消耗超预期 → 分层调用 + 缓存 + 降级
+- ⚠️ 并行调用被限流 → 加重试 + 降级
+
+**关联**：
+- `services/llm_scorer/README.md`
+- `services/llm_scorer/MULTI_AGENT_DESIGN.md`
+- `services/llm_scorer/adapters/llm_gateway.py`
+- ARCHITECTURE.md 机制 4（事件驱动 AI）+ 机制 6 Stage 4-5
 
 ### 模板
 
@@ -669,7 +817,7 @@
 
 ---
 
-## 七、Agent 处理流程
+## 八、Agent 处理流程
 
 ### 接到一项任务时
 
@@ -708,7 +856,7 @@
 
 ---
 
-## 八、变更记录
+## 九、变更记录
 
 | 日期 | 任务 ID | Agent | 改动摘要 | PR / commit |
 |---|---|---|---|---|
@@ -723,7 +871,7 @@
 
 ---
 
-## 九、不接受的优化（黑名单）
+## 十、不接受的优化（黑名单）
 
 如果 agent 提出以下"优化"，**直接拒绝**：
 
@@ -739,6 +887,9 @@
 | 把 dashboard 改回 Go 模板 + HTMX | v2.3 决策已用 Vision UI |
 | 把 indicator 拆出 trading_agent | v2.1 决策合并理由充分 |
 | 把 dashboard 合并回 orchestrator | v2.2 决策"异构语言无法合并" |
+| 把 watchdog 从 orchestrator 拆出来 | v1.3 决策合并，等 orchestrator 真的变重再评估 |
+| 把 db_writer 合并到 ctp_tick | v1.3 决策保留：统一 InfluxDB 写入网关，未来多生产者 |
+| 把 intel_collector 合并到 llm_scorer | v1.3 决策保留：intel_collector 可能部署到香港 |
 
 ---
 
@@ -750,3 +901,5 @@
 | v1.1 | 2026-06-14 | 新增第三章「Dashboard 后端配套」：OPT-201 (ctp_tick 写合约元数据) / OPT-202 (ctp_tick 维护全市场最新价快照) / OPT-203 (orchestrator 计算主力合约)；章节顺序整理（原四五六 → 五六七）|
 | v1.1 | 2026-06-14 | OPT-001 完成：重试逻辑抽取到 pkg/redis/retry.go，ctp_tick 重构完成 |
 | v1.2 | 2026-06-14 | dashboard_web v1.2 设计讨论后整理：(1) 新增 OPT-005 Python 服务注册 (一、跨服务通讯抽取)；(2) 新增第四章「Dashboard 前端任务」12 个 OPT (OPT-300/301/302/303/304/305/306/307/308/309/310/311)，每页一份 OPT 细粒度；(3) 新增第五章「跨模块新功能」4 个 OPT (OPT-204 trading_agent 持仓 gRPC 按合约维度 / OPT-205 orchestrator WebSocket 动态订阅 / OPT-206 紧急平仓两选项 / OPT-207 钉钉链接跳转)；(4) 章节顺序重整为 1-9 章；总 OPT 数 9 → 25 |
+| v1.3 | 2026-06-17 | 架构评审：9 个服务对当前阶段偏重，讨论后决定合并 1 个（watchdog → orchestrator），最终保留 8 个服务。新增第六章「服务合并/精简」含决策记录 + OPT-400（watchdog 合并任务）。db_writer 保留（统一 InfluxDB 写入网关）、intel_collector 保留（可能部署到香港）。章节序号调整（六→七→八→九→十）|
+| v1.4 | 2026-06-17 | llm_scorer 多 Agent 架构设计：选择 OpenAI Agents SDK + DeepSeek，新增 OPT-500（8 个子任务），设计文档 `services/llm_scorer/MULTI_AGENT_DESIGN.md` |
