@@ -4,6 +4,8 @@ syntax = "proto3";
 
 package arbitrage.v1;
 
+option go_package = "github.com/arbitrage-system/contracts/generated/go/arbitragev1";
+
 // 常规 AI 评分（5 分钟周期）
 message AIScore {
   string  symbol      = 1;   // "MA2509"

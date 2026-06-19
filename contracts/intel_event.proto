@@ -4,6 +4,8 @@ syntax = "proto3";
 
 package arbitrage.v1;
 
+option go_package = "github.com/arbitrage-system/contracts/generated/go/arbitragev1";
+
 message IntelEvent {
   string raw_id       = 1;   // sha256(url + fetched_at)
   string source       = 2;   // "caixin" / "eastmoney" / "xueqiu" / "oilprice" / "reuters"

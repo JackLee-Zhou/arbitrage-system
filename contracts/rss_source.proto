@@ -4,6 +4,8 @@ syntax = "proto3";
 
 package arbitrage.v1;
 
+option go_package = "github.com/arbitrage-system/contracts/generated/go/arbitragev1";
+
 message RSSSource {
   string id            = 1;   // uuid
   string name          = 2;   // "财联社化工频道"

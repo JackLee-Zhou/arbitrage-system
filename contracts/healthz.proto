@@ -4,5 +4,7 @@ syntax = "proto3";
 
 package arbitrage.v1;
 
+option go_package = "github.com/arbitrage-system/contracts/generated/go/arbitragev1";
+
 // 已在 alert.proto 中定义 HealthCheckResponse
 // 本文件为预留扩展空间

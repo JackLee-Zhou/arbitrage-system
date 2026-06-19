@@ -4,6 +4,8 @@ syntax = "proto3";
 
 package arbitrage.v1;
 
+option go_package = "github.com/arbitrage-system/contracts/generated/go/arbitragev1";
+
 // 报单请求
 message OrderRequest {
   string symbol       = 1;   // "MA2509"

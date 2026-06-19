@@ -1,6 +1,7 @@
 // orchestrator/adapters/trading_client — gRPC 客户端 → trading_agent:9090
-// 封装对 trading_agent 的 RPC 调用。
-// 注：当前为接口骨架。proto 代码生成后，所有 RPC 方法切到类型安全的 stub。
+//
+// 使用 protoc 生成的 arbiragev1 包中的 OrchestratorServiceClient。
+// 为兼容现有 HTTP handler（返回 map），通过 protojson 中转。
 package trading_client
 
 import (
@@ -13,12 +14,16 @@ import (
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/connectivity"
 	"google.golang.org/grpc/credentials/insecure"
-	"google.golang.org/grpc/status"
+	"google.golang.org/protobuf/encoding/protojson"
+	"google.golang.org/protobuf/proto"
+
+	"github.com/arbitrage-system/contracts/generated/go/arbitragev1"
 )
 
 // Client trading_agent gRPC 客户端
 type Client struct {
 	conn   *grpc.ClientConn
+	stub   arbitragev1.OrchestratorServiceClient
 	target string
 }
 
@@ -31,7 +36,6 @@ func NewClient(target string) (*Client, error) {
 		return nil, fmt.Errorf("grpc new client %s: %w", target, err)
 	}
 
-	// 启动时验证连通性
 	conn.Connect()
 	var state connectivity.State
 	deadline := time.After(5 * time.Second)
@@ -53,10 +57,13 @@ func NewClient(target string) (*Client, error) {
 	}
 
 	log.Printf("[trading_client] connected to %s", target)
-	return &Client{conn: conn, target: target}, nil
+	return &Client{
+		conn:   conn,
+		stub:   arbitragev1.NewOrchestratorServiceClient(conn),
+		target: target,
+	}, nil
 }
 
-// Ping 检查 gRPC 连接状态（检查当前连接状态，不等待变化）
 func (c *Client) Ping(ctx context.Context) error {
 	state := c.conn.GetState()
 	switch state {
@@ -67,7 +74,6 @@ func (c *Client) Ping(ctx context.Context) error {
 	}
 }
 
-// Close 关闭 gRPC 连接
 func (c *Client) Close() {
 	if err := c.conn.Close(); err != nil {
 		log.Printf("[trading_client] close error: %v", err)
@@ -76,124 +82,71 @@ func (c *Client) Close() {
 }
 
 // ============================================================
-// RPC 调用
-// 当前为 JSON→gRPC 骨架实现，等 contracts/ proto 生成代码后：
-//   1. 生成 trading_agent 的 gRPC stub（go package + service client）
-//   2. 替换所有 invoke() 调用为生成的 client 方法
-//   3. 删除 invoke() 内部方法
+// RPC 调用 — 使用 proto 生成的 stub，返回 map 兼容 HTTP handler
 // ============================================================
 
-// GetStatus 查询交易引擎状态
 func (c *Client) GetStatus(ctx context.Context) (map[string]interface{}, error) {
-	var resp map[string]interface{}
-	if err := c.invoke(ctx, "/arbitrage.v1.OrchestratorService/GetStatus",
-		map[string]interface{}{}, &resp); err != nil {
-		return nil, err
-	}
-	return resp, nil
-}
-
-// GetPositions 查询当前持仓
-func (c *Client) GetPositions(ctx context.Context) (map[string]interface{}, error) {
-	var resp map[string]interface{}
-	if err := c.invoke(ctx, "/arbitrage.v1.OrchestratorService/GetPositions",
-		map[string]interface{}{}, &resp); err != nil {
-		return nil, err
-	}
-	return resp, nil
-}
-
-// EmergencyClose 紧急平仓
-func (c *Client) EmergencyClose(ctx context.Context, reason, symbol string) (map[string]interface{}, error) {
-	var resp map[string]interface{}
-	if err := c.invoke(ctx, "/arbitrage.v1.OrchestratorService/EmergencyClose",
-		map[string]interface{}{"reason": reason, "symbol": symbol}, &resp); err != nil {
-		return nil, err
-	}
-	return resp, nil
-}
-
-// PauseStrategy 暂停策略
-func (c *Client) PauseStrategy(ctx context.Context, reason string) (map[string]interface{}, error) {
-	var resp map[string]interface{}
-	if err := c.invoke(ctx, "/arbitrage.v1.OrchestratorService/PauseStrategy",
-		map[string]interface{}{"reason": reason}, &resp); err != nil {
-		return nil, err
-	}
-	return resp, nil
-}
-
-// ResumeStrategy 恢复策略
-func (c *Client) ResumeStrategy(ctx context.Context) (map[string]interface{}, error) {
-	var resp map[string]interface{}
-	if err := c.invoke(ctx, "/arbitrage.v1.OrchestratorService/ResumeStrategy",
-		map[string]interface{}{}, &resp); err != nil {
-		return nil, err
-	}
-	return resp, nil
-}
-
-// UpdateRiskParams 更新风控参数
-func (c *Client) UpdateRiskParams(ctx context.Context, params map[string]interface{}) (map[string]interface{}, error) {
-	var resp map[string]interface{}
-	if err := c.invoke(ctx, "/arbitrage.v1.OrchestratorService/UpdateRiskParams",
-		params, &resp); err != nil {
-		return nil, err
-	}
-	return resp, nil
-}
-
-// ============================================================
-// invoke：通过 gRPC Conn 调用远程方法（JSON 编解码）。
-// 注意：此方法依赖 proto 生成的服务端支持 JSON codec。
-// 标准 gRPC 使用 protobuf codec，JSON 调用需服务端注册 JSON codec 或使用
-// grpc.CallContentSubtype("json") 选项。
-// 等 proto 生成后，所有 RPC 切到 generated stub → 删除此方法。
-// ============================================================
-
-func (c *Client) invoke(ctx context.Context, method string, req, resp interface{}) error {
-	reqBytes, err := json.Marshal(req)
+	resp, err := c.stub.GetStatus(ctx, &arbitragev1.StatusRequest{})
 	if err != nil {
-		return fmt.Errorf("grpc marshal %s: %w", method, err)
+		return nil, fmt.Errorf("GetStatus: %w", err)
 	}
-
-	var respBytes []byte
-	// 使用 RawCodec 透传字节，避免 proto codec 对 []byte 做二次序列化
-	opts := []grpc.CallOption{
-		grpc.ForceCodec(rawCodec{}),
-	}
-	if err := c.conn.Invoke(ctx, method, reqBytes, &respBytes, opts...); err != nil {
-		s, _ := status.FromError(err)
-		return fmt.Errorf("grpc call %s: code=%s msg=%s", method, s.Code(), s.Message())
-	}
-
-	if err := json.Unmarshal(respBytes, resp); err != nil {
-		return fmt.Errorf("grpc unmarshal %s: %w", method, err)
-	}
-	return nil
+	return protoToMap(resp), nil
 }
 
-// rawCodec 是一个透传 codec，不编解码直接传递字节。
-// 等 proto 生成后删除。
-type rawCodec struct{}
-
-func (rawCodec) Marshal(v interface{}) ([]byte, error) {
-	switch b := v.(type) {
-	case []byte:
-		return b, nil
-	default:
-		return json.Marshal(v)
+func (c *Client) GetPositions(ctx context.Context) (map[string]interface{}, error) {
+	resp, err := c.stub.GetPositions(ctx, &arbitragev1.PositionRequest{})
+	if err != nil {
+		return nil, fmt.Errorf("GetPositions: %w", err)
 	}
+	return protoToMap(resp), nil
 }
 
-func (rawCodec) Unmarshal(data []byte, v interface{}) error {
-	switch p := v.(type) {
-	case *[]byte:
-		*p = data
-		return nil
-	default:
-		return json.Unmarshal(data, v)
+func (c *Client) EmergencyClose(ctx context.Context, reason, symbol string) (map[string]interface{}, error) {
+	resp, err := c.stub.EmergencyClose(ctx, &arbitragev1.EmergencyCloseRequest{
+		Reason: reason,
+		Symbol: symbol,
+	})
+	if err != nil {
+		return nil, fmt.Errorf("EmergencyClose: %w", err)
 	}
+	return protoToMap(resp), nil
 }
 
-func (rawCodec) Name() string { return "raw" }
+func (c *Client) PauseStrategy(ctx context.Context, reason string) (map[string]interface{}, error) {
+	resp, err := c.stub.PauseStrategy(ctx, &arbitragev1.PauseStrategyRequest{
+		RequestBy: reason,
+	})
+	if err != nil {
+		return nil, fmt.Errorf("PauseStrategy: %w", err)
+	}
+	return protoToMap(resp), nil
+}
+
+func (c *Client) ResumeStrategy(ctx context.Context) (map[string]interface{}, error) {
+	resp, err := c.stub.ResumeStrategy(ctx, &arbitragev1.ResumeStrategyRequest{})
+	if err != nil {
+		return nil, fmt.Errorf("ResumeStrategy: %w", err)
+	}
+	return protoToMap(resp), nil
+}
+
+func (c *Client) UpdateRiskParams(ctx context.Context, params map[string]interface{}) (map[string]interface{}, error) {
+	param, _ := params["risk_param"].(string)
+	val, _ := params["new_value"].(float64)
+	resp, err := c.stub.UpdateRiskParams(ctx, &arbitragev1.UpdateRiskRequest{
+		RiskParam: param,
+		NewValue:  val,
+	})
+	if err != nil {
+		return nil, fmt.Errorf("UpdateRiskParams: %w", err)
+	}
+	return protoToMap(resp), nil
+}
+
+// protoToMap proto 消息 → map[string]interface{}（protojson 中转，兼容 HTTP handler）
+func protoToMap(m proto.Message) map[string]interface{} {
+	j, _ := protojson.Marshal(m)
+	var out map[string]interface{}
+	_ = json.Unmarshal(j, &out)
+	return out
+}

@@ -1,7 +1,7 @@
 # AI 辅助日内趋势交易系统 — 架构与实施方案
 
 > 版本：v2.3（2026-06-13 更新）
-> 状态：待实施
+> 状态：开发中（P1 早期 — ctp_tick/llm_scorer/trading_agent/orchestrator/db_writer 核心骨架完成）
 > 关联 Plan 文件：`~/.claude/plans/rippling-wibbling-feather.md`
 
 ---
@@ -354,21 +354,23 @@ V1 只实现 `CTPBroker`；V2 加股票时实现 `QMTBroker` 或 `EasyTraderBrok
 
 #### 最终服务清单
 
-| # | 服务 | 类型 | P1 内存 | 角色 |
-|---|---|---|---|---|
-| 1 | **redis** | 基础设施 | 1.0 GB | 消息总线 + 共享状态 |
-| 2 | **influxdb** | 基础设施 | 2.0 GB | 历史数据 + 审计 |
-| 3 | **ctp_tick** | 数据采集 | 0.2 GB | CTP 行情订阅（cgo 必须独立） |
-| 4 | **intel_collector** ⭐ | 数据采集 | 0.6 GB | 三层舆情统一采集（配置驱动） |
-| 5 | **llm_scorer** | 数据加工 | 0.8 GB | LLM 评分（Python 必须独立） |
-| 6 | **trading_agent** ⭐ | 决策核心 | 0.6 GB | 含 indicator/strategy/decision/risk |
-| 7 | **orchestrator** | 编排 | 0.4 GB | gRPC 客户端 + REST API + WebSocket（不含 UI） |
-| 8 | **dashboard_web** ⭐v2.2 | 表现层 | 0.1 GB | Next.js 静态导出 + nginx 托管 |
-| 9 | **db_writer** | 持久化 | 0.4 GB | InfluxDB 串行写入 |
-| 10 | **watchdog** | 监控 | 0.1 GB | 健康巡检 + 钉钉 |
+| # | 服务 | 类型 | P1 内存 | 角色 | 状态 |
+|---|---|---|---|---|---|
+| 1 | **redis** | 基础设施 | 1.0 GB | 消息总线 + 共享状态 | ✅ 就绪 |
+| 2 | **influxdb** | 基础设施 | 2.0 GB | 历史数据 + 审计 | ✅ 就绪 |
+| 3 | **ctp_tick** | 数据采集 | 0.2 GB | CTP 行情订阅（cgo 必须独立） | 🟡 开发中 |
+| 4 | **intel_collector** ⭐ | 数据采集 | 0.6 GB | 三层舆情统一采集（配置驱动） | ⚪ 待开发 |
+| 5 | **llm_scorer** | 数据加工 | 0.8 GB | LLM 评分（Python 必须独立） | 🟡 开发中 |
+| 6 | **trading_agent** ⭐ | 决策核心 | 0.6 GB | 含 indicator/strategy/decision/risk | 🟡 开发中 |
+| 7 | **orchestrator** | 编排 | 0.4 GB | gRPC 客户端 + REST API + WebSocket（不含 UI） | 🟡 开发中 |
+| 8 | **dashboard_web** ⭐v2.2 | 表现层 | 0.1 GB | Next.js 静态导出 + nginx 托管 | 🟡 开发中 |
+| 9 | **db_writer** | 持久化 | 0.4 GB | InfluxDB 串行写入 | 🟡 开发中 |
+| 10 | **watchdog** | 监控 | 0.1 GB | 健康巡检 + 钉钉 | 🟡 开发中 |
 | **小计**（不含系统） | | **6.2 GB** | |
 | 系统 + Docker | - | 1.3 GB | |
 | **总计** | | **7.5 GB** | ✅ 4C8G 充裕 |
+
+> 状态图例：✅ 就绪 | 🟡 开发中 | ⚪ 待开发 | ❌ 已移除
 
 > 备注：`stock_tick` (V2 占位) 不计入。
 

@@ -1,14 +1,23 @@
 # contracts/ Makefile — 契约代码生成与校验
-.PHONY: gen lint breaking clean
+# 使用 protoc（Google 原生编译器）+ protoc-gen-go / protoc-gen-go-grpc
+.PHONY: gen lint clean
+
+PROTO_DIR := .
+GO_OUT    := generated/go
 
 gen: ## 生成 Go + Python 代码
-	buf generate
+	@mkdir -p $(GO_OUT)
+	protoc \
+		--proto_path=$(PROTO_DIR) \
+		--go_out=$(GO_OUT) \
+		--go_opt=paths=source_relative \
+		--go-grpc_out=$(GO_OUT) \
+		--go-grpc_opt=paths=source_relative \
+		$(PROTO_DIR)/*.proto
+	@echo "✅ protoc 代码生成完成"
 
-lint: ## 检查 proto 文件规范性
-	buf lint
-
-breaking: ## 检测是否有破坏性变更（需指定 base）
-	buf breaking --against 'https://github.com/arbitrage-system/contracts.git#branch=main'
+lint: ## 检查 proto 文件规范性（protoc 内置）
+	@echo "⚠️  无 buf lint，依赖 protoc 编译期检查"
 
 clean: ## 清理生成代码
-	rm -rf generated/go/* generated/python/*
+	rm -rf $(GO_OUT)/* generated/python/*

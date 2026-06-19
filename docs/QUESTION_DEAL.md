@@ -15,7 +15,7 @@
 | orchestrator | [QUESTION.md](../services/orchestrator/QUESTION.md) | 6 | 14 | 开发中 |
 | db_writer | [QUESTION.md](../services/db_writer/QUESTION.md) | 8 | 11 | 开发中 |
 | watchdog | [QUESTION.md](../services/watchdog/QUESTION.md) | 6 | 4 | 开发中 |
-| llm_scorer | [QUESTION.md](../services/llm_scorer/QUESTION.md) | 0 | 0 | 待开发 |
+| llm_scorer | [QUESTION.md](../services/llm_scorer/QUESTION.md) | 0 | 0 | 开发中 |
 | intel_collector | [QUESTION.md](../services/intel_collector/QUESTION.md) | 0 | 0 | 待开发 |
 | dashboard_web | [QUESTION.md](../services/dashboard_web/QUESTION.md) | 4 | 12 | 开发中 |
 | stock_tick | [QUESTION.md](../services/stock_tick/QUESTION.md) | 0 | 0 | V2 占位 |
