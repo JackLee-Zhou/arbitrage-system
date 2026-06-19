@@ -19,7 +19,7 @@ import (
 
 	"github.com/arbitrage-system/ctp_tick/internal/adapters/ctp"
 	"github.com/arbitrage-system/ctp_tick/internal/adapters/metadata"
-	"github.com/arbitrage-system/ctp_tick/internal/adapters/redis"
+	redisadapter "github.com/arbitrage-system/ctp_tick/internal/adapters/redis"
 	"github.com/arbitrage-system/ctp_tick/internal/api"
 	"github.com/arbitrage-system/ctp_tick/internal/domain"
 )
@@ -36,13 +36,13 @@ func main() {
 	redisClient := pkgredis.NewAdapter(cfg.RedisAddr)
 
 	// 异步行情写入器（内部启动 writerLoop goroutine）
-	tickWriter := redis.NewTickWriter(redisClient, cfg.SubscribeSymbols)
+	tickWriter := redisadapter.NewTickWriter(redisClient, cfg.SubscribeSymbols)
 
 	// 全市场最新价快照存储（线程安全内存 map）
 	lastPriceStore := domain.NewLastPriceStore()
 
 	// 全市场快照 Redis 写入器（后台 1s 批量写入）
-	snapshotWriter := redis.NewSnapshotWriter(lastPriceStore, redisClient)
+	snapshotWriter := redisadapter.NewSnapshotWriter(lastPriceStore, redisClient)
 
 	// 合约查询器（TD API — Mock 或 cgo 真实现）
 	contractQuerier := ctp.NewContractQuerier()
@@ -113,6 +113,33 @@ func main() {
 		}
 	}()
 
+	// ---- 测试数据注入端点（仅 INGEST_PORT > 0 时启用）----
+	var ingestServer *http.Server
+	if cfg.IngestPort != "" && cfg.IngestPort != "0" {
+		ingestDeps := &api.IngestDeps{
+			TickWriter:     tickWriter,
+			LastPriceStore: lastPriceStore,
+			LastTickTime:   &lastTickTime,
+			Metrics:        metrics,
+		}
+		ingestHandler := api.NewIngestHandler(ingestDeps)
+		ingestServer = &http.Server{
+			Addr:         ":" + cfg.IngestPort,
+			Handler:      ingestHandler,
+			ReadTimeout:  10 * time.Second,
+			WriteTimeout: 10 * time.Second,
+			IdleTimeout:  120 * time.Second,
+		}
+		go func() {
+			log.Printf("[ctp_tick] ingest server on :%s (POST /internal/ingest)", cfg.IngestPort)
+			if err := ingestServer.ListenAndServe(); err != http.ErrServerClosed {
+				log.Printf("[ctp_tick] ingest server error: %v", err)
+			}
+		}()
+	} else {
+		log.Println("[ctp_tick] ingest server disabled (INGEST_PORT=0 or unset)")
+	}
+
 	// ---- Step 1: 查询全市场期货合约 ----
 	allSymbols, err := contractQuerier.QueryAllFutures(
 		cfg.CTPFrontAddr, cfg.CTPBrokerID, cfg.CTPUserID, cfg.CTPPassword,
@@ -182,6 +209,11 @@ func main() {
 	mdAPI.Close()
 	tickWriter.Close()     // 等待 writerLoop 结束 + flush 残余数据
 	snapshotWriter.Close() // 最终 flush 快照（必须在 redisClient.Close 前）
+	if ingestServer != nil {
+		if err := ingestServer.Shutdown(shutdownCtx); err != nil {
+			log.Printf("[ctp_tick] ingest server shutdown timeout, force exit")
+		}
+	}
 	if err := httpServer.Shutdown(shutdownCtx); err != nil {
 		log.Printf("[ctp_tick] HTTP shutdown timeout, force exit")
 	}
@@ -243,6 +275,7 @@ type Config struct {
 	ServiceName      string
 	ServiceHost      string // 本机可达地址，如 "localhost"（本地）或 "ctp_tick"（Docker）
 	HealthPort       string
+	IngestPort       string // 测试数据注入端口（0=禁用）
 	RedisAddr        string
 	CTPFrontAddr     string
 	CTPBrokerID      string
@@ -260,6 +293,7 @@ func loadConfig() Config {
 		ServiceName:      getEnv("SERVICE_NAME", "ctp_tick"),
 		ServiceHost:      getEnv("SERVICE_HOST", ""), // 空 → 用 ServiceName 兜底
 		HealthPort:       getEnv("HEALTH_PORT", "8081"),
+		IngestPort:       getEnv("INGEST_PORT", "8090"), // 0=禁用测试注入端点
 		RedisAddr:        getEnv("REDIS_ADDR", "redis:6379"),
 		CTPFrontAddr:     getEnv("CTP_FRONT_ADDR", "tcp://180.168.146.187:10130"),
 		CTPBrokerID:      getEnv("CTP_BROKER_ID", "9999"),

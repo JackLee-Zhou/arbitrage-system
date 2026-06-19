@@ -47,7 +47,7 @@ func NewAdapter(addr string) *GoRedisAdapter {
 func (a *GoRedisAdapter) XAdd(ctx context.Context, stream string, values map[string]interface{}) error {
 	return a.client.XAdd(ctx, &goredis.XAddArgs{
 		Stream: stream,
-		MaxLen: 10000,
+		MaxLen: 100000,
 		Approx: true,
 		Values: values,
 	}).Err()

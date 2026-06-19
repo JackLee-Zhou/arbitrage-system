@@ -178,9 +178,26 @@ func (c *StreamConsumer) readAndProcess(ctx context.Context) {
 		Count:    c.xReadBatchSize,
 	})
 	if err != nil {
-		if err != context.DeadlineExceeded && err != context.Canceled {
-			log.Printf("[consumer] xreadgroup error (stream=%s): %v", c.stream, err)
+		if err == context.DeadlineExceeded || err == context.Canceled {
+			return
 		}
+
+		// NOGROUP：消费组因 Stream 被删除而丢失，自动重建
+		if isNoGroupError(err) {
+			log.Printf("[consumer] WARNING: consumer group lost (stream=%s), recreating...", c.stream)
+			if createErr := c.client.XGroupCreate(ctx, c.stream, c.groupName, "$"); createErr != nil && !isBusyGroupError(createErr) {
+				log.Printf("[consumer] failed to recreate consumer group (stream=%s): %v", c.stream, createErr)
+			}
+			// 延迟重试，避免死循环刷日志
+			select {
+			case <-time.After(2 * time.Second):
+			case <-c.stopCh:
+			case <-ctx.Done():
+			}
+			return
+		}
+
+		log.Printf("[consumer] xreadgroup error (stream=%s): %v", c.stream, err)
 		return
 	}
 
@@ -362,6 +379,12 @@ func (c *StreamConsumer) ackMessages(ctx context.Context, ids []string) {
 // isBusyGroupError 判断是否为消费组已存在错误
 func isBusyGroupError(err error) bool {
 	return strings.Contains(err.Error(), "BUSYGROUP")
+}
+
+// isNoGroupError 判断是否为消费组/Stream 不存在的错误
+// go-redis 在 XREADGROUP 时如果 key 或 group 不存在，返回 "NOGROUP" 错误
+func isNoGroupError(err error) bool {
+	return strings.Contains(err.Error(), "NOGROUP")
 }
 
 // ============================================================

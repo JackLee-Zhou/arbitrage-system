@@ -221,21 +221,17 @@ type GlobalState struct {
 
 #### 修改类（**走交易时段守卫**）
 
-| Method | Path | 用途 |
-|---|---|---|
-| POST | `/strategies` | 新增策略 |
-| PUT | `/strategies/{id}` | 编辑策略 |
-| DELETE | `/strategies/{id}` | 删除策略 |
-| POST | `/strategies/{id}/promote` | shadow → live |
-| POST | `/strategies/{id}/pause` | 暂停 |
-| POST | `/strategies/{id}/resume` | 恢复 |
-| PUT | `/risk/params` | 改风控参数 |
+| Method | Path | Body | 用途 |
+|---|---|---|---|
+| POST | `/api/v1/strategies` | `{"action":"pause","reason":"..."}` | 暂停策略 |
+| POST | `/api/v1/strategies` | `{"action":"resume"}` | 恢复策略 |
+| POST | `/api/v1/risk` | `{"risk_param":"MaxPosition","new_value":3}` | 改风控参数。`risk_param` 支持: `MaxPosition`、`MaxLossPerDay`、`StopLossPct`（大小写敏感，Go 驼峰格式） |
 
 #### 紧急操作（**任何时间允许**）
 
-| Method | Path | 用途 |
-|---|---|---|
-| POST | `/emergency_close` | ⭐ 一键紧急平仓 |
+| Method | Path | Body | 用途 |
+|---|---|---|---|
+| POST | `/api/v1/emergency_close` | `{"symbol":"MA2509","reason":"手动平仓","scope":"all"}` | ⭐ 一键紧急平仓 |
 
 ### WebSocket `:8080/ws`
 
