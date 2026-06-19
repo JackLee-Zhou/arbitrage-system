@@ -16,6 +16,8 @@
 ## 文档
 
 - [架构与实施方案](docs/ARCHITECTURE.md) — 完整设计文档
+- [架构红线](ARCHITECTURE_GUARDRAILS.md) — 正式数据流、禁止业务 mock/stub、禁止写死关注标的
+- [安全加固方案](SECURITY_HARDENING.md) — 全链路加密、mTLS、指令签名、密钥管理
 - 跨语言契约（待写）
 - 部署手册（待写）
 - 排障指南（待写）

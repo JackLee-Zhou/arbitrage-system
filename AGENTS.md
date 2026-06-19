@@ -37,6 +37,7 @@
 - [ ] docs/QUESTION_DEAL.md 的全局汇总 + 按日期汇总：____
 - [ ] OPTIMIZATIONS.md 是否有相关 OPT-XXX：____
 - [ ] docs/ARCHITECTURE.md 的相关章节：____
+- [ ] ARCHITECTURE_GUARDRAILS.md（正式数据流 / 禁止业务 mock / 禁止写死关注标的）：____
 - [ ] 涉及服务的 services/<name>/README.md：____
 - [ ] 涉及服务的 services/<name>/QUESTION.md：____
 - [ ] contracts/ 是否需要改：____

@@ -205,3 +205,6 @@ internal/
 比如ctp_tick 直接使用的 func Register(ctx context.Context, client pkgredis.RedisClient, info ServiceInfo, opts ...Option) (*Registry, error)，为啥
 2. ctp_tick 里面的内存快照是啥
 3. func (w *TickWriter) Send(symbol string, tick *domain.StandardTick) bool 这里面是怎么发到管道的；ctp_tick 是如何写数据到db的
+
+
+sk-fuyao-8rKHlwUwA2cvGJDwJ-DhPHTa-iPM7lQx
