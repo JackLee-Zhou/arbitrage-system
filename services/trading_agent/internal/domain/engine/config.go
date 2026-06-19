@@ -17,7 +17,7 @@ type EngineConfig struct {
 // DefaultConfig 返回默认引擎配置
 func DefaultConfig() *EngineConfig {
 	return &EngineConfig{
-		Symbol:            "MA2509",
+		Symbol:            "", // 必须从环境变量 SYMBOL 设置
 		AIAlpha:           0.2,
 		HistorySize:       200,
 		MaxPosition:       2,

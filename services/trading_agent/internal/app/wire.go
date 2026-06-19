@@ -104,7 +104,7 @@ type orderExecutor struct {
 func (e *orderExecutor) PlaceOrder(req engine.OrderRequest) (engine.OrderID, error) {
 	log.Printf("[order] PlaceOrder: %s %s %d@%.2f type=%s",
 		req.Symbol, req.Direction, req.Volume, req.Price, req.OrderType)
-	return engine.OrderID(fmt.Sprintf("mock-%d", time.Now().UnixNano())), nil
+	return "", fmt.Errorf("broker 不可用，无法报单：请配置 CTP 连接或检查 CTP_TD_ENABLED 环境变量")
 }
 
 func (e *orderExecutor) CancelOrder(orderID string) error {

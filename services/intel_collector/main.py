@@ -21,7 +21,7 @@ async def healthz():
 
 @app.get("/metrics")
 async def metrics():
-    return {"placeholder": "metrics"}
+    return {"service": "intel_collector", "metrics": {}}
 
 
 async def fetch_loop():
@@ -30,7 +30,7 @@ async def fetch_loop():
     while True:
         try:
             # TODO: 加载配置 → 按源类型并发抓取 → 解析 → 清洗 → 去重 → XADD
-            logger.info("Fetch tick — placeholder")
+            logger.info("Fetch tick — data source not available")
         except Exception as e:
             logger.error(f"Fetch error: {e}")
         await asyncio.sleep(300)  # 默认 5 分钟

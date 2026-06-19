@@ -6,5 +6,5 @@ import "net/http"
 // MetricsHandler Prometheus 指标处理器
 func MetricsHandler(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "text/plain")
-	_, _ = w.Write([]byte("# placeholder orchestrator metrics\n"))
+	// TODO: 接入 Prometheus metrics，当前返回空
 }

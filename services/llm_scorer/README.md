@@ -1,8 +1,8 @@
 # services/llm_scorer — LLM 评分服务
 
 > 本服务属于 arbitrage-system 微服务集合的一员。
-> 在动手前必读：[`/ENGINEERING_GUIDE.md`](../../ENGINEERING_GUIDE.md) + [`/docs/ARCHITECTURE.md`](../../docs/ARCHITECTURE.md)
-> 重点章节：架构机制 4（事件驱动 AI 紧急触发）+ 机制 6 Stage 4（语义理解）
+> 在动手前必读：[`/ENGINEERING_GUIDE.md`](../../ENGINEERING_GUIDE.md) + [`/docs/ARCHITECTURE.md`](../../docs/ARCHITECTURE.md) + [`/ARCHITECTURE_GUARDRAILS.md`](../../ARCHITECTURE_GUARDRAILS.md)
+> 重点章节：架构机制 4（事件驱动 AI 紧急触发）+ 机制 6 Stage 4（语义理解）+ 正式数据流 / 禁止业务 mock / 禁止写死关注标的
 
 ---
 
@@ -17,18 +17,21 @@ LLM 智能层。负责**两件事**：
 ## 职责
 
 ### 做什么 ✅
-- 每 5 分钟触发一轮综合评分（market + technical + fundamentals + fuser 四个 Agent）
+- 按 watchlist 中的用户关注标的触发综合评分（Agent 数量与 Prompt 后续走配置化）
 - 调用 DeepSeek-V3 → 智谱 GLM-4 二级熔断
-- 写 `ai_score:MA2509:live` 和 `ai_score:MA2509:shadow` 双轨
-- 订阅 `news_stream`，对每条新闻调 LLM 打情感分（输出存 InfluxDB `llm_analysis`）
+- 基于正式上游数据写 `ai_score:{symbol}:live` 和 `ai_score:{symbol}:shadow` 双轨
+- 订阅正式新闻 / 舆情流，对每条新闻调 LLM 打情感分（输出存 InfluxDB `llm_analysis`）
 - 提供 `/emergency_analysis` 端点：trading_agent 检测剧烈波动时调用，生成紧急评分
-- 聚合 Stage 5：合成时间窗口的舆情指数 `sentiment:MA2509:current`
+- 聚合 Stage 5：合成时间窗口的舆情指数 `sentiment:{symbol}:current`
 
 ### 不做什么 ❌
 - 不做交易决策
 - 不抓爬虫数据（intel_collector 的事）
 - 不直接写 InfluxDB（走 db_writer）
 - 不缓存 LLM 结果给业务决策用（每次调 LLM 是真实调用，结果存 InfluxDB 后回测用）
+- 不在生产路径内置 mock / stub / fake 行情、指标、新闻或基本面数据
+- 不在代码中写死关注合约；关注标的必须来自 dashboard → orchestrator 持久化 watchlist
+- 不绕过 ctp_tick / stock_tick / intel_collector 的正式数据流自行构造输入
 
 ---
 

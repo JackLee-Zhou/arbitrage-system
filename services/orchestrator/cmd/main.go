@@ -105,8 +105,11 @@ func main() {
 				snap["positions"] = pos
 			}
 		}
-		if score, err := redisReader.AIScore(ctx, "MA2509"); err == nil {
-			snap["scores"] = score
+		symbol := os.Getenv("SYMBOL")
+		if symbol != "" {
+			if score, err := redisReader.AIScore(ctx, symbol); err == nil {
+				snap["scores"] = score
+			}
 		}
 		return snap
 	}
@@ -224,7 +227,7 @@ func makeOverviewHandler(redis *redisreader.Reader, trading *trading_client.Clie
 		}
 
 		// AI Score
-		if score, err := redis.AIScore(ctx, "MA2509"); err == nil {
+		if score, err := redis.AIScore(ctx, os.Getenv("SYMBOL")); err == nil {
 			result["ai_score"] = score
 		}
 
@@ -384,20 +387,10 @@ func makeContractsHandler(redis *redisreader.Reader) http.HandlerFunc {
 			}
 		}
 
-		// Redis miss → 返回 mock 列表
+		// Redis miss → 返回空列表（数据不可用，fail-closed）
 		if contracts == nil {
-			contracts = []map[string]interface{}{
-				{"symbol": "MA2509", "name": "甲醇2509", "exchange": "DCE", "price": 2456.0, "change_pct": 0.35, "volume": 125630, "is_main": true},
-				{"symbol": "MA2601", "name": "甲醇2601", "exchange": "DCE", "price": 2470.0, "change_pct": -0.12, "volume": 28640, "is_main": false},
-				{"symbol": "MA2505", "name": "甲醇2505", "exchange": "DCE", "price": 2440.0, "change_pct": 0.08, "volume": 15200, "is_main": false},
-				{"symbol": "RB2510", "name": "螺纹钢2510", "exchange": "SHFE", "price": 3780.0, "change_pct": 0.52, "volume": 342100, "is_main": true},
-				{"symbol": "HC2510", "name": "热卷2510", "exchange": "SHFE", "price": 3910.0, "change_pct": 0.41, "volume": 89400, "is_main": true},
-				{"symbol": "TA2509", "name": "PTA2509", "exchange": "CZCE", "price": 5880.0, "change_pct": -0.23, "volume": 234500, "is_main": true},
-				{"symbol": "EG2509", "name": "乙二醇2509", "exchange": "DCE", "price": 4620.0, "change_pct": 0.15, "volume": 67200, "is_main": true},
-				{"symbol": "PP2509", "name": "聚丙烯2509", "exchange": "DCE", "price": 7520.0, "change_pct": -0.08, "volume": 128900, "is_main": true},
-				{"symbol": "L2509", "name": "聚乙烯2509", "exchange": "DCE", "price": 8250.0, "change_pct": 0.31, "volume": 94500, "is_main": true},
-				{"symbol": "V2509", "name": "PVC2509", "exchange": "DCE", "price": 6020.0, "change_pct": -0.45, "volume": 78300, "is_main": true},
-			}
+			log.Printf("[api] contracts: Redis instruments:all 不可用，返回空列表")
+			contracts = []map[string]interface{}{}
 		}
 
 		// ?type=main 过滤
@@ -502,7 +495,7 @@ func makeAIScoresHandler(redis *redisreader.Reader) http.HandlerFunc {
 		ctx := r.Context()
 		symbol := r.URL.Query().Get("symbol")
 		if symbol == "" {
-			symbol = "MA2509"
+			symbol = os.Getenv("SYMBOL")
 		}
 
 		result := map[string]interface{}{
@@ -512,12 +505,6 @@ func makeAIScoresHandler(redis *redisreader.Reader) http.HandlerFunc {
 
 		// 读取 live 评分
 		live, err := redis.AIScore(ctx, symbol)
-		if err != nil {
-			// 回退到默认
-			if symbol != "MA2509" {
-				live, err = redis.AIScore(ctx, "MA2509")
-			}
-		}
 		if err == nil {
 			result["live"] = live
 		}
@@ -590,7 +577,7 @@ func makeAIScoresHistoryHandler(influx *adapters.InfluxReader) http.HandlerFunc 
 		}
 		symbol := r.URL.Query().Get("symbol")
 		if symbol == "" {
-			symbol = "MA2509"
+			symbol = os.Getenv("SYMBOL")
 		}
 		data, err := influx.QueryAIScoreHistory(r.Context(), symbol, time.Time{}, time.Time{}, 100)
 		if err != nil {

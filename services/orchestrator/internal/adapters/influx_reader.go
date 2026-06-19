@@ -97,7 +97,7 @@ func (r *InfluxReader) QueryAIScoreHistory(ctx context.Context, symbol string, f
 		}
 	}
 	if symbol == "" {
-		symbol = "MA2509"
+		return nil, fmt.Errorf("symbol is required")
 	}
 	if from.IsZero() {
 		from = time.Now().Add(-24 * time.Hour)
@@ -126,7 +126,7 @@ func (r *InfluxReader) QueryIntraday(ctx context.Context, symbol string, limit i
 		}
 	}
 	if symbol == "" {
-		symbol = "MA2509"
+		return nil, fmt.Errorf("symbol is required")
 	}
 	if limit <= 0 {
 		limit = 240 // 4 hours of 1-min data
@@ -149,7 +149,7 @@ func (r *InfluxReader) QueryKLine(ctx context.Context, symbol string, period str
 		}
 	}
 	if symbol == "" {
-		symbol = "MA2509"
+		return nil, fmt.Errorf("symbol is required")
 	}
 	if from.IsZero() {
 		from = time.Now().Add(-30 * 24 * time.Hour)

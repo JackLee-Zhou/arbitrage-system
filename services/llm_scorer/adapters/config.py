@@ -15,7 +15,7 @@ class Config:
         self.glm_model = os.getenv("GLM_MODEL", "glm-4")
 
         self.redis_addr = os.getenv("REDIS_ADDR", "redis:6379")
-        self.symbol = os.getenv("SYMBOL", "MA2509")
+        self.symbol = os.getenv("SYMBOL", "")
         self.score_interval_sec = int(os.getenv("SCORE_INTERVAL_SEC", "300"))
         self.score_ttl_sec = int(os.getenv("SCORE_TTL_SEC", "1800"))
         self.http_port = int(os.getenv("HTTP_PORT", "5000"))

@@ -7,4 +7,4 @@ router = APIRouter()
 @router.get("/metrics")
 async def metrics():
     """Prometheus 指标端点"""
-    return {"placeholder": "intel_collector metrics"}
+    return {"service": "intel_collector", "metrics": {}}

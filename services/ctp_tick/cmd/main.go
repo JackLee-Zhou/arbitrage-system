@@ -162,7 +162,7 @@ func main() {
 
 	log.Printf("[ctp_tick] connecting to %s, subscribing %d symbols...", cfg.CTPFrontAddr, len(allSymbols))
 	if err := mdAPI.Connect(allSymbols); err != nil {
-		log.Printf("[ctp_tick] CTP connect failed: %v (mock mode continues)", err)
+		log.Printf("[ctp_tick] CTP connect failed: %v (service degraded, will retry)", err)
 	}
 
 	// ---- 等待退出信号 ----
@@ -266,7 +266,7 @@ func loadConfig() Config {
 		CTPUserID:        getEnv("CTP_USER_ID", ""),
 		CTPPassword:      getEnv("CTP_PASSWORD", ""),
 		FlowPath:         getEnv("CTP_FLOW_PATH", "./flow_md"),
-		SubscribeSymbols: parseSymbols(getEnv("SUBSCRIBE_SYMBOLS", "MA2509")),
+		SubscribeSymbols: parseSymbols(getEnv("SUBSCRIBE_SYMBOLS", "")),
 		InfluxURL:        getEnv("INFLUXDB_URL", ""), // 空=不写 InfluxDB
 		InfluxToken:      getEnv("INFLUXDB_TOKEN", ""),
 		InfluxOrg:        getEnv("INFLUXDB_ORG", "arbitrage"),

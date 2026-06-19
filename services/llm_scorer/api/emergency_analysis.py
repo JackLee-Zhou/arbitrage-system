@@ -9,7 +9,7 @@ router = APIRouter()
 
 
 @router.post("/emergency_analysis")
-async def emergency_analysis(symbol: str = "MA2509"):
+async def emergency_analysis(symbol: str = ""):
     """紧急分析端点（trading_agent 触发）
 
     接收波动数据 → 抓最近 30 分钟新闻 → 专用 EMERGENCY_PROMPT 调 LLM

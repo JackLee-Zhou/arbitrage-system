@@ -31,8 +31,8 @@ func NewSnapshotHandler(store *domain.LastPriceStore) *SnapshotHandler {
 //
 //	{
 //	  "symbols": {
-//	    "MA2509": { "symbol":"MA2509", "last_price":2350.0, ... },
-//	    "RB2510": { "symbol":"RB2510", "last_price":3800.0, ... }
+//	    "MAXXX": { "symbol":"MAXXX", "last_price":2350.0, ... },
+//	    "RBXXX": { "symbol":"RBXXX", "last_price":3800.0, ... }
 //	  },
 //	  "count": 2,
 //	  "updated_at": "2026-06-14T10:30:00+08:00"

@@ -205,7 +205,7 @@ func loadConfig() Config {
 		InfluxDBOrg:       pkgconfig.GetEnv("INFLUXDB_ORG", "arbitrage"),
 		HealthPort:        pkgconfig.GetEnv("HEALTH_PORT", "8081"),
 		GRPCPort:          pkgconfig.GetEnv("GRPC_PORT", "9090"),
-		Symbol:            pkgconfig.GetEnv("SYMBOL", "MA2509"),
+		Symbol:            pkgconfig.GetEnv("SYMBOL", ""),
 		AIAlpha:           getEnvFloat("AI_ALPHA", 0.2),
 		InitialCapital:    getEnvFloat("INITIAL_CAPITAL", 100000),
 		MaxPosition:       getEnvInt("MAX_POSITION", 2),
@@ -281,7 +281,7 @@ func reconcileState(cfg Config, redisClient *pkgredis.GoRedisAdapter, stateStore
 	// V1: CTP adapter 尚未实现，暂时跳过。
 	ctpFront := pkgconfig.GetEnv("CTP_FRONT_ADDR", "")
 	if ctpFront == "" {
-		log.Println("[reconcile] Step 3/3: 跳过（CTP 未配置，本地 mock 模式）")
+		log.Println("[reconcile] Step 3/3: 跳过（CTP 未配置）")
 	} else {
 		log.Println("[reconcile] Step 3/3: ⏳ CTP 对账待实现（CTP adapter 尚未就绪）")
 	}

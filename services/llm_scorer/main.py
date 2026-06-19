@@ -27,11 +27,11 @@ async def healthz():
 
 @app.get("/metrics")
 async def metrics():
-    return {"placeholder": "metrics"}
+    return {"service": "llm_scorer", "metrics": {}}
 
 
 @app.post("/emergency_analysis")
-async def emergency_analysis(symbol: str = "MA2509"):
+async def emergency_analysis(symbol: str = ""):
     """紧急分析端点（trading_agent 触发，30s timeout）"""
     # TODO: 实现紧急评分逻辑
     return {"symbol": symbol, "score": None, "status": "pending"}
@@ -46,7 +46,7 @@ async def scoring_loop(symbol: str, interval_sec: int):
             # 1. 获取行情数据（从 Redis）
             # 2. 多 Agent 协作评分
             # 3. 写入 Redis: ai_score:{symbol}:live + :shadow
-            logger.info("Score tick — placeholder")
+            logger.info("Score tick — LLM not available")
         except Exception as e:
             logger.error(f"Scoring error: {e}")
         await asyncio.sleep(interval_sec)
@@ -62,7 +62,7 @@ async def main():
     signal.signal(signal.SIGINT, _handle_shutdown)
     signal.signal(signal.SIGTERM, _handle_shutdown)
 
-    symbol = os.getenv("SYMBOL", "MA2509")
+    symbol = os.getenv("SYMBOL", "")
     interval = int(os.getenv("SCORE_INTERVAL_SEC", "300"))
 
     # 启动评分循环
